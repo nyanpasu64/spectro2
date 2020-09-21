@@ -1,0 +1,6 @@
+-   repo: https://github.com/doublify/pre-commit-rust
+    rev: master
+    hooks:
+    -   id: cargo-check
+    -   id: fmt
+        exclude: 3rdparty/*
