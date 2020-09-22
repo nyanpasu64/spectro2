@@ -300,24 +300,20 @@ impl State {
         let vs_src = load_from_file("shaders/shader.vert")?;
         let fs_src = load_from_file("shaders/shader.frag")?;
         let mut compiler = shaderc::Compiler::new().unwrap();
-        let vs_spirv = compiler
-            .compile_into_spirv(
-                &vs_src,
-                shaderc::ShaderKind::Vertex,
-                "shader.vert",
-                "main",
-                None,
-            )
-            .unwrap();
-        let fs_spirv = compiler
-            .compile_into_spirv(
-                &fs_src,
-                shaderc::ShaderKind::Fragment,
-                "shader.frag",
-                "main",
-                None,
-            )
-            .unwrap();
+        let vs_spirv = compiler.compile_into_spirv(
+            &vs_src,
+            shaderc::ShaderKind::Vertex,
+            "shader.vert",
+            "main",
+            None,
+        )?;
+        let fs_spirv = compiler.compile_into_spirv(
+            &fs_src,
+            shaderc::ShaderKind::Fragment,
+            "shader.frag",
+            "main",
+            None,
+        )?;
         let vs_module =
             device.create_shader_module(wgpu::util::make_spirv(&vs_spirv.as_binary_u8()));
         let fs_module =
