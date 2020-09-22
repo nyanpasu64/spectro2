@@ -8,11 +8,14 @@ layout(location=0) out vec4 f_color;
 
 // https://www.khronos.org/opengl/wiki/Layout_Qualifier_(GLSL)
 layout(set=0, binding=0)
-buffer Fft {
-    vec2 spectrum[257];
+buffer GpuFftLayout {
+    uint fft_out_size;
 };
 
-const int MAX_FFT_SIZE = 257;
+layout(set=0, binding=1)
+buffer Fft {
+    vec2 spectrum[];
+};
 
 const float TWOPI = 6.28318530717958647693;
 
@@ -49,11 +52,11 @@ void main() {
     float x = (v_position.x + 1) / 2;
 
     float y = (v_position.y + 1) / 2;
-    y *= (MAX_FFT_SIZE - 1);
+    y *= (fft_out_size - 1);
     int yint = int(y);
     float yexcess = y - yint;
 
-    if (yint < 0 || yint + 1 >= MAX_FFT_SIZE) {
+    if (yint < 0 || yint + 1 >= fft_out_size) {
         THROW;
     }
 

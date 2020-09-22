@@ -6,7 +6,7 @@ use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
 use rustfft::num_traits::Zero;
-use std::{fs::File, io::Read, path::PathBuf, sync::atomic::AtomicBool};
+use std::{fs::File, io::Read, path::PathBuf, slice, sync::atomic::AtomicBool};
 use wgpu::util::DeviceExt;
 use winit::{
     dpi::PhysicalSize,
@@ -98,12 +98,12 @@ fn main() -> Result<()> {
     // https://github.com/RustAudio/cpal/blob/b78ff83c03a0d0b40d51dc24f49369205f022b0a/src/host/wasapi/device.rs#L650-L658
     println!("Picked buffer size: {:?}", config.buffer_size);
 
-    let mut fft_buffer = FftBuffer::new(FftConfig {
+    let mut fft_vec_buffer = FftBuffer::new(FftConfig {
         size: FFT_INPUT_SIZE,
         channels: config.channels,
         window_type: WindowType::Hann,
     });
-    let spectrum_size = fft_buffer.spectrum_size();
+    let spectrum_size = fft_vec_buffer.spectrum_size();
     let new_spectrum_box =
         || -> Option<Box<FftVec>> { Some(Box::new(vec![Zero::zero(); spectrum_size])) };
 
@@ -129,7 +129,7 @@ fn main() -> Result<()> {
         device
             .build_input_stream(
                 &config,
-                move |data, _| fft_buffer.push(data, &mut spectrum_callback),
+                move |data, _| fft_vec_buffer.push(data, &mut spectrum_callback),
                 err_fn,
             )
             .unwrap()
@@ -231,9 +231,19 @@ fn fft_as_pod(my_slice: &FftSlice) -> &PodSlice {
     unsafe { std::slice::from_raw_parts(my_slice.as_ptr() as *const _, my_slice.len()) }
 }
 
+/// Sent to GPU. The value equals FFT_OUT_SIZE (but is a different type).
+#[repr(C)]
+#[derive(Copy, Clone)]
+struct GpuFftLayout {
+    fft_out_size: u32,
+}
+
+unsafe impl bytemuck::Zeroable for GpuFftLayout {}
+unsafe impl bytemuck::Pod for GpuFftLayout {}
+
 /// The longest allowed FFT is ???.
 /// The real FFT produces ??? complex bins.
-const MAX_FFT_SIZE: usize = FFT_INPUT_SIZE / 2 + 1;
+const FFT_OUT_SIZE: usize = FFT_INPUT_SIZE / 2 + 1;
 
 // Docs: https://sotrh.github.io/learn-wgpu/beginner/tutorial2-swapchain/
 // Code: https://github.com/sotrh/learn-wgpu/blob/master/code/beginner/tutorial2-swapchain/src/main.rs
@@ -248,9 +258,13 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
 
+    fft_layout: GpuFftLayout,
     fft_vec: PodVec,
-    fft_buffer: wgpu::Buffer,
-    fft_bind_group: wgpu::BindGroup,
+
+    fft_layout_buffer: wgpu::Buffer,
+    fft_vec_buffer: wgpu::Buffer,
+
+    bind_group: wgpu::BindGroup,
 }
 
 fn load_from_file(fname: &str) -> Result<String> {
@@ -261,7 +275,7 @@ fn load_from_file(fname: &str) -> Result<String> {
 
 impl State {
     // Creating some of the wgpu types requires async code
-    async fn new(window: &Window) -> anyhow::Result<Self> {
+    async fn new(window: &Window) -> anyhow::Result<State> {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -320,35 +334,59 @@ impl State {
             device.create_shader_module(wgpu::util::make_spirv(&fs_spirv.as_binary_u8()));
 
         // # FFT SSBO
-        let fft_vec: PodVec = vec![PodComplex(Zero::zero()); MAX_FFT_SIZE];
-        let fft_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Instance Buffer"),
+        let fft_layout = GpuFftLayout {
+            fft_out_size: FFT_OUT_SIZE as u32,
+        };
+        let fft_vec: PodVec = vec![PodComplex(Zero::zero()); FFT_OUT_SIZE];
+
+        let fft_layout_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("FFT layout (size)"),
+            contents: bytemuck::cast_slice(slice::from_ref(&fft_layout)),
+            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+        });
+        let fft_vec_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("FFT data"),
             contents: bytemuck::cast_slice(&fft_vec),
             usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
         });
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStage::FRAGMENT,
-                ty: wgpu::BindingType::StorageBuffer {
-                    // We don't plan on changing the size of this buffer
-                    dynamic: false,
-                    // The shader is not allowed to modify it's contents
-                    readonly: true,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::UniformBuffer {
+                        dynamic: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None, // Only texture arrays are supported, nothing else.
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    ty: wgpu::BindingType::StorageBuffer {
+                        dynamic: false,
+                        readonly: true,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
             label: Some("bind_group_layout"),
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(fft_buffer.slice(..)),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(fft_layout_buffer.slice(..)),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Buffer(fft_vec_buffer.slice(..)),
+                },
+            ],
             label: Some("bind_group"),
         });
 
@@ -398,7 +436,7 @@ impl State {
             alpha_to_coverage_enabled: false, // 7.
         });
 
-        Ok(Self {
+        Ok(State {
             surface,
             device,
             queue,
@@ -406,9 +444,11 @@ impl State {
             swap_chain,
             size,
             render_pipeline,
+            fft_layout,
             fft_vec,
-            fft_buffer,
-            fft_bind_group: bind_group,
+            fft_layout_buffer,
+            fft_vec_buffer,
+            bind_group,
         })
     }
 
@@ -425,8 +465,13 @@ impl State {
 
     fn update(&mut self, spectrum: &FftSlice) {
         self.fft_vec.copy_from_slice(fft_as_pod(spectrum));
+        self.queue.write_buffer(
+            &self.fft_layout_buffer,
+            0,
+            bytemuck::cast_slice(slice::from_ref(&self.fft_layout)),
+        );
         self.queue
-            .write_buffer(&self.fft_buffer, 0, bytemuck::cast_slice(&self.fft_vec));
+            .write_buffer(&self.fft_vec_buffer, 0, bytemuck::cast_slice(&self.fft_vec));
     }
     fn render(&mut self) {
         let frame = self
@@ -460,7 +505,7 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline); // 2.
-            render_pass.set_bind_group(0, &self.fft_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
             render_pass.draw(0..6, 0..1); // 3.
         }
 
