@@ -142,7 +142,10 @@ fn main() -> Result<()> {
 
     let event_loop = EventLoop::new();
     let window = {
-        let mut window_builder = WindowBuilder::new();
+        let mut window_builder = WindowBuilder::new().with_inner_size(PhysicalSize {
+            width: 256,
+            height: 768,
+        });
         if cfg!(windows) {
             // Work around cpal/winit crash.
             // https://github.com/amethyst/amethyst/issues/2218
