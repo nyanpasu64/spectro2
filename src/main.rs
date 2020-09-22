@@ -98,30 +98,35 @@ fn main() -> BoxResult<()> {
     // https://github.com/RustAudio/cpal/blob/b78ff83c03a0d0b40d51dc24f49369205f022b0a/src/host/wasapi/device.rs#L650-L658
     println!("Picked buffer size: {:?}", config.buffer_size);
 
-    // i *somehow* found a permutation of code that works properly.
-    let (stream, spectrum_size) = {
-        let mut fft_buffer = FftBuffer::new(FftConfig {
-            size: FFT_INPUT_SIZE,
-            channels: config.channels,
-            window_type: WindowType::Hann,
-        })?;
-        let spectrum_size = fft_buffer.spectrum_size();
+    let mut fft_buffer = FftBuffer::new(FftConfig {
+        size: FFT_INPUT_SIZE,
+        channels: config.channels,
+        window_type: WindowType::Hann,
+    })?;
+    let spectrum_size = fft_buffer.spectrum_size();
+    let new_spectrum_box =
+        || -> Option<Box<FftVec>> { Some(Box::new(vec![Zero::zero(); spectrum_size])) };
 
-        let mut extra_fft: Option<Box<FftVec>> = Some(Box::new(vec![Zero::zero(); spectrum_size]));
+    let stream = {
+        {
+            let old_global = NEXT_FFT.swap(new_spectrum_box(), Ordering::AcqRel);
+            assert_eq!(old_global, None);
+        }
+
+        let mut scratch_fft: Option<Box<FftVec>> = new_spectrum_box();
         let mut spectrum_callback = move |spectrum: &FftSlice| {
-            extra_fft = NEXT_FFT.swap(extra_fft.take(), Ordering::AcqRel);
-
-            if let Some(vec) = &mut extra_fft {
-                vec.copy_from_slice(spectrum);
-            } else {
-                // This will perform memory allocations, but only for the first callback.
-                // I feel this is acceptable.
-                extra_fft = Some(Box::new(spectrum.to_vec()));
+            {
+                let scratch_fft = scratch_fft
+                    .as_deref_mut()
+                    .expect("extra_fft/NEXT_FFT should never be None");
+                scratch_fft.copy_from_slice(spectrum);
             }
+
+            scratch_fft = NEXT_FFT.swap(scratch_fft.take(), Ordering::AcqRel);
             FFT_AVAILABLE.store(true, Ordering::Release);
         };
 
-        let stream = device
+        device
             .build_input_stream(
                 &config,
                 move |data, _| {
@@ -131,8 +136,7 @@ fn main() -> BoxResult<()> {
                 },
                 err_fn,
             )
-            .unwrap();
-        (stream, spectrum_size)
+            .unwrap()
     };
 
     println!("before");
@@ -156,7 +160,7 @@ fn main() -> BoxResult<()> {
 
     // Since main can't be async, we're going to need to block
     let mut state = block_on(State::new(&window));
-    let mut stale_fft: Option<Box<FftVec>> = Some(Box::new(vec![Zero::zero(); spectrum_size]));
+    let mut received_fft = new_spectrum_box();
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -188,14 +192,19 @@ fn main() -> BoxResult<()> {
         Event::RedrawRequested(_) => {
             if FFT_AVAILABLE.load(Ordering::Acquire) {
                 FFT_AVAILABLE.store(false, Ordering::Relaxed);
-                stale_fft = NEXT_FFT.swap(stale_fft.take(), Ordering::AcqRel);
+                received_fft = NEXT_FFT.swap(received_fft.take(), Ordering::AcqRel);
                 assert!(
-                    stale_fft.is_some(),
+                    received_fft.is_some(),
                     "FFT_AVAILABLE is true yet NEXT_FFT is None"
                 );
             }
 
-            state.update(&*stale_fft.as_ref().expect("stale_fft should never be None"));
+            state.update(
+                received_fft
+                    .as_ref()
+                    .expect("stale_fft should never be None")
+                    .as_slice(),
+            );
             state.render();
         }
         Event::MainEventsCleared => {
