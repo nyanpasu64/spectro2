@@ -35,7 +35,7 @@ vec3 value(int freq, float xrel) {
 
     float xrad = xrel * TWOPI;
     float unit = data.x * cos(xrad * freq) - data.y * sin(xrad * freq);
-    unit = (unit + 1) / 2;
+    unit = float(unit > 0);
 
     float value = unit * magnitude;
     return value.xxx;
