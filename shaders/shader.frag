@@ -6,6 +6,7 @@ layout(location=0) in vec2 v_position;
 
 layout(location=0) out vec4 f_color;
 
+// https://www.khronos.org/opengl/wiki/Layout_Qualifier_(GLSL)
 layout(set=0, binding=0)
 buffer Fft {
     vec2 data[257];

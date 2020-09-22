@@ -338,7 +338,7 @@ impl State {
                     readonly: true,
                     min_binding_size: None,
                 },
-                count: None,
+                count: None, // Only texture arrays are supported, nothing else.
             }],
             label: Some("bind_group_layout"),
         });
