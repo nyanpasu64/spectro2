@@ -30,7 +30,8 @@ vec3 value(int freq, float xrel) {
     if (magnitude > 1) {
         return vec3(1, 0, 1);
     }
-    data /= magnitude;
+    // Prevent division by 0.
+    data /= (magnitude + 1e-9);
 
     float xrad = xrel * TWOPI;
     float unit = data.x * cos(xrad * freq) - data.y * sin(xrad * freq);
