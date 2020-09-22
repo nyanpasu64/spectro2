@@ -11,11 +11,8 @@ cpal = { path = "3rdparty/cpal", version = "0.12.1" }
 rustfft = "3.0.1"
 dsp = { path = "3rdparty/dsp-0.8.1", version = "0.8.1" }
 realfft = "0.2.1"
-image = "0.23.9"
 # Version 0.22.2 crashes when combining with cpal. master doesn't.
 winit = { git = "https://github.com/rust-windowing/winit.git", rev = "47e7aa4" }
-# git cgmath doesn't depend on rand. Version 0.17.0 does.
-cgmath = { default-features = false, git = "https://github.com/rustgd/cgmath.git", rev = "a691de8" }
 env_logger = "0.7.1"
 log = "0.4.11"
 wgpu = "0.6.0"
