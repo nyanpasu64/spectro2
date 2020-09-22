@@ -9,7 +9,7 @@ layout(location=0) out vec4 f_color;
 // https://www.khronos.org/opengl/wiki/Layout_Qualifier_(GLSL)
 layout(set=0, binding=0)
 buffer Fft {
-    vec2 data[257];
+    vec2 spectrum[257];
 };
 
 const int MAX_FFT_SIZE = 257;
@@ -24,18 +24,19 @@ void throw() {
 }
 
 vec3 value(int freq, float xrel) {
-    vec2 data = data[freq];
-    data *= 10.;
+    vec2 val = spectrum[freq] * 10.;
 
-    float magnitude = sqrt(data.x * data.x + data.y * data.y);
+    float magnitude = sqrt(val.x * val.x + val.y * val.y);
     if (magnitude > 1) {
         return vec3(1, 0, 1);
     }
-    // Prevent division by 0.
-    data /= (magnitude + 1e-9);
+    float angle = atan(val.y, val.x);
 
-    float xrad = xrel * TWOPI;
-    float unit = data.x * cos(xrad * freq) - data.y * sin(xrad * freq);
+    // Prevent division by 0.
+    val /= (magnitude + 1e-9);
+
+    float x_theta = TWOPI * xrel * freq;
+    float unit = cos(angle + x_theta);
     unit = float(unit > 0);
 
     float value = unit * magnitude;
