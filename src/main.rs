@@ -292,8 +292,10 @@ impl State {
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let vs_module = device.create_shader_module(wgpu::include_spirv!("shader.vert.spv"));
-        let fs_module = device.create_shader_module(wgpu::include_spirv!("shader.frag.spv"));
+        let vs_module =
+            device.create_shader_module(wgpu::include_spirv!("../generated/shader.vert.spv"));
+        let fs_module =
+            device.create_shader_module(wgpu::include_spirv!("../generated/shader.frag.spv"));
 
         // # FFT SSBO
         let fft_vec: PodVec = vec![PodComplex(Zero::zero()); MAX_FFT_SIZE];
