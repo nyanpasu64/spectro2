@@ -1,15 +1,15 @@
 mod fft;
-mod types;
 
-use crate::types::BoxResult;
+use anyhow::Result;
 use atomicbox::AtomicOptionBox;
 use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
 use rustfft::num_traits::Zero;
-use std::sync::atomic::AtomicBool;
+use std::{fs::File, io::Read, path::PathBuf, sync::atomic::AtomicBool};
 use wgpu::util::DeviceExt;
 use winit::{
+    dpi::PhysicalSize,
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::{Window, WindowBuilder},
@@ -20,7 +20,7 @@ const FFT_INPUT_SIZE: usize = 512;
 static NEXT_FFT: AtomicOptionBox<FftVec> = AtomicOptionBox::new_none();
 static FFT_AVAILABLE: AtomicBool = AtomicBool::new(false);
 
-fn main() -> BoxResult<()> {
+fn main() -> Result<()> {
     println!("");
 
     const LOOPBACK_CAPTURE: bool = true;
@@ -102,7 +102,7 @@ fn main() -> BoxResult<()> {
         size: FFT_INPUT_SIZE,
         channels: config.channels,
         window_type: WindowType::Hann,
-    })?;
+    });
     let spectrum_size = fft_buffer.spectrum_size();
     let new_spectrum_box =
         || -> Option<Box<FftVec>> { Some(Box::new(vec![Zero::zero(); spectrum_size])) };
@@ -129,11 +129,7 @@ fn main() -> BoxResult<()> {
         device
             .build_input_stream(
                 &config,
-                move |data, _| {
-                    fft_buffer
-                        .push(data, &mut spectrum_callback)
-                        .expect("Error when sending data to FFT")
-                },
+                move |data, _| fft_buffer.push(data, &mut spectrum_callback),
                 err_fn,
             )
             .unwrap()
@@ -159,7 +155,7 @@ fn main() -> BoxResult<()> {
     use futures::executor::block_on;
 
     // Since main can't be async, we're going to need to block
-    let mut state = block_on(State::new(&window));
+    let mut state = block_on(State::new(&window))?;
     let mut received_fft = new_spectrum_box();
 
     event_loop.run(move |event, _, control_flow| match event {
@@ -254,9 +250,15 @@ struct State {
     fft_bind_group: wgpu::BindGroup,
 }
 
+fn load_from_file(fname: &str) -> Result<String> {
+    let mut buf: Vec<u8> = vec![];
+    File::open(PathBuf::from(fname))?.read_to_end(&mut buf)?;
+    Ok(String::from_utf8(buf)?)
+}
+
 impl State {
     // Creating some of the wgpu types requires async code
-    async fn new(window: &Window) -> Self {
+    async fn new(window: &Window) -> anyhow::Result<Self> {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -292,10 +294,31 @@ impl State {
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
+        let vs_src = load_from_file("shaders/shader.vert")?;
+        let fs_src = load_from_file("shaders/shader.frag")?;
+        let mut compiler = shaderc::Compiler::new().unwrap();
+        let vs_spirv = compiler
+            .compile_into_spirv(
+                &vs_src,
+                shaderc::ShaderKind::Vertex,
+                "shader.vert",
+                "main",
+                None,
+            )
+            .unwrap();
+        let fs_spirv = compiler
+            .compile_into_spirv(
+                &fs_src,
+                shaderc::ShaderKind::Fragment,
+                "shader.frag",
+                "main",
+                None,
+            )
+            .unwrap();
         let vs_module =
-            device.create_shader_module(wgpu::include_spirv!("../generated/shader.vert.spv"));
+            device.create_shader_module(wgpu::util::make_spirv(&vs_spirv.as_binary_u8()));
         let fs_module =
-            device.create_shader_module(wgpu::include_spirv!("../generated/shader.frag.spv"));
+            device.create_shader_module(wgpu::util::make_spirv(&fs_spirv.as_binary_u8()));
 
         // # FFT SSBO
         let fft_vec: PodVec = vec![PodComplex(Zero::zero()); MAX_FFT_SIZE];
@@ -376,7 +399,7 @@ impl State {
             alpha_to_coverage_enabled: false, // 7.
         });
 
-        Self {
+        Ok(Self {
             surface,
             device,
             queue,
@@ -387,7 +410,7 @@ impl State {
             fft_vec,
             fft_buffer,
             fft_bind_group: bind_group,
-        }
+        })
     }
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {

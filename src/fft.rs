@@ -1,4 +1,3 @@
-use crate::types::BoxResult;
 use cpal::ChannelCount;
 use dsp::window::Window;
 use rustfft::num_complex::Complex;
@@ -49,13 +48,13 @@ pub struct FftBuffer {
 }
 
 impl FftBuffer {
-    pub fn new(cfg: FftConfig) -> BoxResult<FftBuffer> {
+    pub fn new(cfg: FftConfig) -> FftBuffer {
         assert!(cfg.size >= 2);
         assert!(cfg.channels >= 1);
 
-        let fft = realfft::RealToComplex::<f32>::new(cfg.size)?;
+        let fft = realfft::RealToComplex::<f32>::new(cfg.size).unwrap();
 
-        Ok(FftBuffer {
+        FftBuffer {
             cfg,
 
             // downmix,
@@ -69,7 +68,7 @@ impl FftBuffer {
             buffer: Vec::with_capacity(cfg.size),
             scratch: vec![Zero::zero(); cfg.size],
             spectrum: vec![Zero::zero(); cfg.size / 2 + 1],
-        })
+        }
     }
 
     pub fn spectrum_size(&self) -> usize {
@@ -81,7 +80,7 @@ impl FftBuffer {
     ///
     /// fft_callback() is called on a (len/2 + 1) vector of complex values,
     /// where elements 0 and len/2 are purely real.
-    pub fn push(&mut self, input: &[i16], fft_callback: FftCallback) -> BoxResult<()> {
+    pub fn push(&mut self, input: &[i16], fft_callback: FftCallback) {
         let frames = input.chunks_exact(self.cfg.channels as usize);
         for frame in frames {
             let avg = {
@@ -94,14 +93,13 @@ impl FftBuffer {
             self.buffer.push(avg);
 
             if self.buffer.len() == self.buffer.capacity() {
-                (&mut *self).run_fft()?;
+                (&mut *self).run_fft();
                 fft_callback(&self.spectrum);
                 self.buffer.clear();
             }
         }
 
         assert_eq!(self.buffer.capacity(), self.cfg.size);
-        Ok(())
     }
 
     /// Preconditions:
@@ -111,7 +109,7 @@ impl FftBuffer {
     /// Postconditions:
     /// - self.spectrum contains the windowed FFT of self.buffer.
     /// - self.buffer is unchanged.
-    fn run_fft(&mut self) -> BoxResult<()> {
+    fn run_fft(&mut self) {
         if let Some(window) = &self.window {
             // Precondition: LHS, input, and output have same length.
             window.apply(&self.buffer, &mut self.scratch);
@@ -120,10 +118,11 @@ impl FftBuffer {
             (&mut self.scratch).copy_from_slice(&self.buffer);
         }
 
-        self.fft.process(&mut self.scratch, &mut self.spectrum)?;
+        self.fft
+            .process(&mut self.scratch, &mut self.spectrum)
+            .unwrap();
         for elem in self.spectrum.iter_mut() {
             *elem /= self.buffer.len() as f32;
         }
-        Ok(())
     }
 }

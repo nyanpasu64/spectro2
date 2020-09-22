@@ -13,15 +13,11 @@ dsp = { path = "3rdparty/dsp-0.8.1", version = "0.8.1" }
 realfft = "0.2.1"
 # Version 0.22.2 crashes when combining with cpal. master doesn't.
 winit = { git = "https://github.com/rust-windowing/winit.git", rev = "47e7aa4" }
+shaderc = "0.6.2"
 env_logger = "0.7.1"
 log = "0.4.11"
 wgpu = "0.6.0"
 futures = "0.3.5"
 bytemuck = "1.4.1"
 atomicbox = { path = "3rdparty/atomicbox-0.3.0", version = "0.3.0" }
-
-[build-dependencies]
 anyhow = "1.0.32"
-fs_extra = "1.2.0"
-glob = "0.3.0"
-shaderc = "0.6.2"
