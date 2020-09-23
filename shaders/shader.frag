@@ -44,7 +44,7 @@ vec3 value(int k, float n_phase) {
 }
 
 // unit: half-cycle
-const float FREQ_REL = 8000. / 24000.;
+const float FREQ_REL = 4000. / 24000.;
 // unit: rel-screen
 const float RADIUS_REL = 0.8;
 
