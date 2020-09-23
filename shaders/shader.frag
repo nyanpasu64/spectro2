@@ -23,8 +23,8 @@ const float TWOPI = 6.28318530717958647693;
 
 #define THROW f_color = vec4(1, 0, 1, 1); return
 
-const float BACKGROUND = 0.01;
-const bool RESCALE = false;
+const float BACKGROUND = 0;
+const bool RESCALE = true;
 
 vec3 value(int k, float n_phase) {
     vec2 val = spectrum[k] * 10.;
