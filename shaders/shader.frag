@@ -26,10 +26,10 @@ const float TWOPI = 6.28318530717958647693;
 const float BACKGROUND = 0;
 const bool RESCALE = true;
 
-const float CENTER_ANGLE = TWOPI / 4;
+const float CENTER_ANGLE = 0;
 const bool HIDE_SIDES = true;  // Hide side of window (where signal is out of phase).
 
-const vec2 OFFSET = vec2(0, 0.75);
+const vec2 OFFSET = vec2(0.75, 0);
 
 float unipolar(float bipolar) {
     return (bipolar + 1) / 2;
