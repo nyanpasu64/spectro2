@@ -224,6 +224,8 @@ unsafe impl bytemuck::Zeroable for PodComplex {}
 /// Safety: Complex<f32> is a repr(C) struct of two f32, and has alignment 4.
 unsafe impl bytemuck::Pod for PodComplex {}
 
+// PodComplex is casted to vec2 and requires alignment 8 when sent to the GPU.
+// This is not a problem as long as the start position within the Buffer is aligned.
 type PodVec = Vec<PodComplex>;
 type PodSlice = [PodComplex];
 
