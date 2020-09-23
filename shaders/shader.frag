@@ -52,7 +52,8 @@ void main() {
     float x = (v_position.x + 1) / 2;
 
     float y = (v_position.y + 1) / 2;
-    y *= (fft_out_size - 1);
+    y *= (fft_out_size - 1) * (8000. / 24000.);
+
     int yint = int(y);
     float yexcess = y - yint;
 
