@@ -1,0 +1,38 @@
+# Faster linking?
+[target.x86_64-pc-windows-msvc]
+linker = "lld-link.exe"
+
+# https://doc.rust-lang.org/cargo/reference/profiles.html
+# profile.dev = no --release
+# fast to compile, okay enough to run
+[profile.dev]
+opt-level = 2
+debug = true
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = 'abort'
+incremental = false
+codegen-units = 16
+rpath = false
+
+[profile.release]
+opt-level = 2
+debug = false
+debug-assertions = false
+overflow-checks = false
+lto = false
+panic = 'abort'
+incremental = false
+codegen-units = 16
+rpath = false
+
+# Build all dependencies optimized, but reduce optimization for this crate
+# Only enable incremental builds for this crate
+[profile.dev.package.spectro2]
+opt-level = 1
+incremental = true
+
+# Only enable incremental builds for this crate
+[profile.release.package.spectro2]
+incremental = true
