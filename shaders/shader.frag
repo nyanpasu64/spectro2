@@ -37,7 +37,7 @@ vec3 value(int k, float n_phase) {
     float unit = cos(val_angle + k * n_phase);
 
     // Convert to [0, 1] (in this case, hard threshold).
-    unit = float(unit > 0);
+    unit = (unit + 1) / 2;
 
     float value = unit * val_mag;
     return value.xxx;
