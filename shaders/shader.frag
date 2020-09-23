@@ -87,6 +87,6 @@ void main() {
         return;
     }
 
-    vec3 brightness = mix(value(k, n_phase), value(k + 1, n_phase), k_frac);
+    vec3 brightness = value(k, n_phase);
     f_color = vec4(brightness, 1.0);
 }
