@@ -26,41 +26,46 @@ void throw() {
     return;
 }
 
-vec3 value(int freq, float xrel) {
-    vec2 val = spectrum[freq] * 10.;
+vec3 value(int k, float n_phase) {
+    vec2 val = spectrum[k] * 10.;
 
-    float magnitude = sqrt(val.x * val.x + val.y * val.y);
-    if (magnitude > 1) {
+    float val_mag = length(val);
+    if (val_mag > 1) {
+        // loud inputs. should this branch be removed?
         return vec3(1, 0, 1);
     }
-    float angle = atan(val.y, val.x);
+    float val_angle = atan(val.y, val.x);
 
-    // Prevent division by 0.
-    val /= (magnitude + 1e-9);
+    // Compute real component of DFT.
+    float unit = cos(val_angle + k * n_phase);
 
-    float x_theta = TWOPI * xrel * freq;
-    float unit = cos(angle + x_theta);
+    // Convert to [0, 1] (in this case, hard threshold).
     unit = float(unit > 0);
 
-    float value = unit * magnitude;
+    float value = unit * val_mag;
     return value.xxx;
 }
 
 void main() {
     f_color = vec4(0,0,0,0);
 
+    // Between 0 and 1.
     float x = (v_position.x + 1) / 2;
-
     float y = (v_position.y + 1) / 2;
-    y *= (fft_out_size - 1) * (8000. / 24000.);
 
-    int yint = int(y);
-    float yexcess = y - yint;
+    // time = n/N, between 0 and 2pi.
+    float n_phase = x * TWOPI;
 
-    if (yint < 0 || yint + 1 >= fft_out_size) {
+    // FFT bin.
+    float k_float = y * (fft_out_size - 1) * (8000. / 24000.);
+    int k = int(k_float);
+    float k_frac = k_float - k;
+
+    if (k < 0 || k + 1 >= fft_out_size) {
+        // should never happen if we calculated k correctly.
         THROW;
     }
 
-    vec3 brightness = mix(value(yint, x), value(yint + 1, x), yexcess);
+    vec3 brightness = mix(value(k, n_phase), value(k + 1, n_phase), k_frac);
     f_color = vec4(brightness, 1.0);
 }
