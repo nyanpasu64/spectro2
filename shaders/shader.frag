@@ -88,5 +88,5 @@ void main() {
     }
 
     vec3 brightness = value(k, n_phase);
-    f_color = vec4(brightness, 1.0);
+    f_color = vec4(brightness + 0.01, 1.0);
 }
