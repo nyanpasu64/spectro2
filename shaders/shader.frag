@@ -39,10 +39,6 @@ vec3 value(int k, float n_phase) {
     vec2 val = spectrum[k] * 10.;
 
     float val_mag = length(val);
-    if (val_mag > 1) {
-        // loud inputs. should this branch be removed?
-        return vec3(1, 0, 1);
-    }
     if (HIDE_SIDES) {
         val_mag *= unipolar(cos(n_phase + TWOPI / 2));
     }
