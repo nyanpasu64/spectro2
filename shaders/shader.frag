@@ -25,8 +25,11 @@ const float TWOPI = 6.28318530717958647693;
 
 const float BACKGROUND = 0;
 const bool RESCALE = true;
-const bool HIDE_LEFT = true;
-const float X_OFFSET = 0.75;
+
+const float CENTER_ANGLE = TWOPI / 4;
+const bool HIDE_SIDES = true;  // Hide side of window (where signal is out of phase).
+
+const vec2 OFFSET = vec2(0, 0.75);
 
 float unipolar(float bipolar) {
     return (bipolar + 1) / 2;
@@ -40,7 +43,7 @@ vec3 value(int k, float n_phase) {
         // loud inputs. should this branch be removed?
         return vec3(1, 0, 1);
     }
-    if (HIDE_LEFT) {
+    if (HIDE_SIDES) {
         val_mag *= unipolar(cos(n_phase + TWOPI / 2));
     }
 
@@ -80,10 +83,11 @@ void main() {
 
     // Between -1 and 1 (or slightly more, depending on aspect ratio).
     // unit: rel-screen
-    vec2 position_rel = (v_position + vec2(X_OFFSET, 0)) * screen_px / screen_diameter_px;
+    vec2 position_rel = (v_position + OFFSET) * screen_px / screen_diameter_px;
 
     // time = n/N, between 0 and 2pi.
-    float n_phase = atan(position_rel.y, position_rel.x) + TWOPI / 2;
+    // CENTER_ANGLE should map to TWOPI/2 (center of window)
+    float n_phase = atan(position_rel.y, position_rel.x) + TWOPI / 2 - CENTER_ANGLE;
 
     // FFT bin.
     float k_float = length(position_rel) / RADIUS_REL * FREQ_REL * (fft_out_K - 1);
