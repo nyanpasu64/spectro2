@@ -21,12 +21,7 @@ buffer Fft {
 
 const float TWOPI = 6.28318530717958647693;
 
-#define THROW throw(); return
-
-void throw() {
-    f_color = vec4(1, 0, 1, 1);
-    return;
-}
+#define THROW f_color = vec4(1, 0, 1, 1); return
 
 vec3 value(int k, float n_phase) {
     vec2 val = spectrum[k] * 10.;
