@@ -1,6 +1,6 @@
 mod fft;
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use atomicbox::AtomicOptionBox;
 use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -15,12 +15,49 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-const FFT_INPUT_SIZE: usize = 1024;
+const MIN_FFT_SIZE: usize = 4;
+const MAX_FFT_SIZE: usize = 16384;
 
 static NEXT_FFT: AtomicOptionBox<FftVec> = AtomicOptionBox::new_none();
 static FFT_AVAILABLE: AtomicBool = AtomicBool::new(false);
 
+use structopt::StructOpt;
+
+fn parse_fft_size(src: &str) -> Result<usize> {
+    let num: usize = src
+        .parse()
+        .map_err(|_| Error::msg(format!("FFT size {} must be an integer", src)))?;
+
+    if num > MAX_FFT_SIZE {
+        return Err(Error::msg(format!(
+            "FFT size {} must be <= {}",
+            num, MAX_FFT_SIZE
+        )));
+    }
+    if num < MIN_FFT_SIZE {
+        return Err(Error::msg(format!(
+            "FFT size {} must be >= {}",
+            num, MIN_FFT_SIZE
+        )));
+    }
+    if num % 2 != 0 {
+        return Err(Error::msg(format!("FFT size {} must be even", num)));
+    }
+    Ok(num)
+}
+
+/// Real-time phase-magnitude spectrum viewer
+#[derive(StructOpt, Debug)]
+#[structopt(name = "basic")]
+struct Opt {
+    /// Number of samples to use in each FFT block
+    #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_fft_size))]
+    fft_size: usize,
+}
+
 fn main() -> Result<()> {
+    let opt = Opt::from_args();
+
     println!("");
 
     const LOOPBACK_CAPTURE: bool = true;
@@ -99,7 +136,7 @@ fn main() -> Result<()> {
     println!("Picked buffer size: {:?}", config.buffer_size);
 
     let mut fft_vec_buffer = FftBuffer::new(FftConfig {
-        size: FFT_INPUT_SIZE,
+        size: opt.fft_size,
         channels: config.channels,
         window_type: WindowType::Hann,
     });
@@ -158,7 +195,7 @@ fn main() -> Result<()> {
     use futures::executor::block_on;
 
     // Since main can't be async, we're going to need to block
-    let mut state = block_on(State::new(&window))?;
+    let mut state = block_on(State::new(&window, &opt))?;
     let mut received_fft = new_spectrum_box();
 
     event_loop.run(move |event, _, control_flow| match event {
@@ -247,7 +284,9 @@ unsafe impl bytemuck::Pod for GpuFftLayout {}
 
 /// The longest allowed FFT is ???.
 /// The real FFT produces ??? complex bins.
-const FFT_OUT_SIZE: usize = FFT_INPUT_SIZE / 2 + 1;
+fn fft_out_size(fft_input_size: usize) -> usize {
+    fft_input_size / 2 + 1
+}
 
 // Docs: https://sotrh.github.io/learn-wgpu/beginner/tutorial2-swapchain/
 // Code: https://github.com/sotrh/learn-wgpu/blob/master/code/beginner/tutorial2-swapchain/src/main.rs
@@ -279,7 +318,7 @@ fn load_from_file(fname: &str) -> Result<String> {
 
 impl State {
     // Creating some of the wgpu types requires async code
-    async fn new(window: &Window) -> anyhow::Result<State> {
+    async fn new(window: &Window, opt: &Opt) -> anyhow::Result<State> {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -338,12 +377,13 @@ impl State {
             device.create_shader_module(wgpu::util::make_spirv(&fs_spirv.as_binary_u8()));
 
         // # FFT SSBO
+        let fft_out_size = fft_out_size(opt.fft_size);
         let fft_layout = GpuFftLayout {
             screen_wx: size.width,
             screen_hy: size.height,
-            fft_out_size: FFT_OUT_SIZE as u32,
+            fft_out_size: fft_out_size as u32,
         };
-        let fft_vec: PodVec = vec![PodComplex(Zero::zero()); FFT_OUT_SIZE];
+        let fft_vec: PodVec = vec![PodComplex(Zero::zero()); fft_out_size];
 
         let fft_layout_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("FFT layout (size)"),
