@@ -36,7 +36,7 @@ float unipolar(float bipolar) {
 }
 
 vec3 value(int k, float n_phase) {
-    vec2 val = spectrum[k] * 10.;
+    vec2 val = spectrum[k];
 
     float val_mag = length(val);
     if (HIDE_SIDES) {

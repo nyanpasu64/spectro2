@@ -18,14 +18,29 @@ pub enum WindowType {
     Hann,
 }
 
-/// size must be a power of 2, at least 2.
-/// (It's probably nonsensical to use a size less than 32 or so.)
-///
-/// channels must be 1 or more.
+/// Normalization note: The FFT's output is divided by `size`
+/// so a pure DC input will result in an output of `volume`.
+/// As `size` increases, pure tones become thinner but not brighter,
+/// and noise becomes dimmer.
 #[derive(Debug, Copy, Clone)]
 pub struct FftConfig {
+    /// How much to amplify the incoming signal when performing the FFT.
+    pub volume: f32,
+
+    /// How many samples per FFT block.
+    /// (It's probably nonsensical to use a size less than 32 or so.)
     pub size: usize,
+
+    /// How many samples to advance before the next FFT.
+    /// Must be <= size.
+    pub redraw_interval: usize,
+
+    /// The incoming wave is [frame][channel]i16.
+    /// This stores the number of channels to average (or eventually separate out).
+    /// Must be >= 1.
     pub channels: ChannelCount,
+
+    /// How to window the input signal to reduce sidelobes.
     pub window_type: WindowType,
     // TODO downmix: bool,
     // TODO add option to overlap by 50%.
@@ -51,6 +66,7 @@ impl FftBuffer {
     pub fn new(cfg: FftConfig) -> FftBuffer {
         assert!(cfg.size >= 2);
         assert!(cfg.channels >= 1);
+        assert!(cfg.redraw_interval <= cfg.size);
 
         let fft = realfft::RealToComplex::<f32>::new(cfg.size).unwrap();
 
@@ -95,7 +111,11 @@ impl FftBuffer {
             if self.buffer.len() == self.buffer.capacity() {
                 (&mut *self).run_fft();
                 fft_callback(&self.spectrum);
-                self.buffer.clear();
+
+                // Remove the first `redraw_interval` samples from the vector,
+                // such that `redraw_interval` samples must be pushed
+                // to trigger the next redraw.
+                self.buffer.drain(..self.cfg.redraw_interval);
             }
         }
 
@@ -122,7 +142,7 @@ impl FftBuffer {
             .process(&mut self.scratch, &mut self.spectrum)
             .unwrap();
         for elem in self.spectrum.iter_mut() {
-            *elem /= self.buffer.len() as f32;
+            *elem *= self.cfg.volume / self.buffer.len() as f32;
         }
     }
 }

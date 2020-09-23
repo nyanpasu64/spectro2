@@ -6,7 +6,7 @@ use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
 use rustfft::num_traits::Zero;
-use std::{fs::File, io::Read, path::PathBuf, slice, sync::atomic::AtomicBool};
+use std::{cmp::min, fs::File, io::Read, path::PathBuf, slice, sync::atomic::AtomicBool};
 use wgpu::util::DeviceExt;
 use winit::{
     dpi::PhysicalSize,
@@ -46,21 +46,48 @@ fn parse_fft_size(src: &str) -> Result<usize> {
     Ok(num)
 }
 
+fn parse_redraw_size(src: &str) -> Result<usize> {
+    let num: usize = src
+        .parse()
+        .map_err(|_| Error::msg(format!("Redraw size {} must be an integer", src)))?;
+    if num == 0 {
+        return Err(Error::msg("Redraw size must be >= 0"));
+    }
+    Ok(num)
+}
+
 /// Real-time phase-magnitude spectrum viewer
 #[derive(StructOpt, Debug)]
 #[structopt(name = "basic")]
 struct Opt {
-    /// Number of samples to use in each FFT block
+    /// If passed, will listen to speaker instead of microphone.
+    /// Note that this causes substantial latency (around 180ms),
+    /// and you may wish to route speakers through VB-Audio Virtual Cable
+    /// so both speakers and the visualization are delayed by the same amount.
+    #[structopt(short, long)]
+    loopback: bool,
+
+    /// How much to amplify the incoming signal
+    /// before sending it to the spectrum viewer.
+    #[structopt(short, long, default_value = "10")]
+    volume: f32,
+
+    /// Number of samples to use in each FFT block.
+    /// Defaults to 1024.
     #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_fft_size))]
     fft_size: usize,
+
+    /// Number of samples to advance time before recalculating FFT.
+    /// Defaults to 1024.
+    /// If this value exceeds --fft-size, it is clamped to it.
+    #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_redraw_size))]
+    redraw_size: usize,
 }
 
 fn main() -> Result<()> {
     let opt = Opt::from_args();
 
     println!("");
-
-    const LOOPBACK_CAPTURE: bool = true;
 
     let host = cpal::default_host();
 
@@ -84,7 +111,7 @@ fn main() -> Result<()> {
     println!("");
 
     // TODO add checkbox for toggling between input and loopback capture
-    let device = if LOOPBACK_CAPTURE {
+    let device = if opt.loopback {
         host.default_output_device()
     } else {
         host.default_input_device()
@@ -99,7 +126,7 @@ fn main() -> Result<()> {
         }
     );
 
-    let supported_configs_range: Vec<cpal::SupportedStreamConfigRange> = if LOOPBACK_CAPTURE {
+    let supported_configs_range: Vec<cpal::SupportedStreamConfigRange> = if opt.loopback {
         device
             .supported_output_configs()
             .expect("error while querying configs")
@@ -136,7 +163,9 @@ fn main() -> Result<()> {
     println!("Picked buffer size: {:?}", config.buffer_size);
 
     let mut fft_vec_buffer = FftBuffer::new(FftConfig {
+        volume: opt.volume,
         size: opt.fft_size,
+        redraw_interval: min(opt.redraw_size, opt.fft_size),
         channels: config.channels,
         window_type: WindowType::Hann,
     });
