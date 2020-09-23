@@ -143,8 +143,8 @@ fn main() -> Result<()> {
     let event_loop = EventLoop::new();
     let window = {
         let mut window_builder = WindowBuilder::new().with_inner_size(PhysicalSize {
-            width: 256,
-            height: 768,
+            width: 1024,
+            height: 1024,
         });
         if cfg!(windows) {
             // Work around cpal/winit crash.

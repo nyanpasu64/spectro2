@@ -9,9 +9,9 @@ layout(location=0) out vec4 f_color;
 // https://www.khronos.org/opengl/wiki/Layout_Qualifier_(GLSL)
 layout(set=0, binding=0)
 uniform GpuFftLayout {
-    uint screen_wx;
-    uint screen_hy;
-    uint fft_out_size;
+    uint screen_x_px;
+    uint screen_y_px;
+    uint fft_out_K;
 };
 
 layout(set=0, binding=1)
@@ -48,27 +48,43 @@ vec3 value(int k, float n_phase) {
     return value.xxx;
 }
 
+// unit: half-cycle
+const float FREQ_REL = 8000. / 24000.;
+// unit: rel-screen
+const float RADIUS_REL = 0.8;
+
 void main() {
-    f_color = vec4(0,0,0,0);
+    f_color = vec4(0, 0, 0, 1);
 
-    // Between 0 and 1.
-    float x = float(gl_FragCoord.x) / screen_wx;
+    // # Draw a circular spectrum analyzer,
+    // where the -x axis is zero phase (edge of the window),
+    // the +x axis is 2pi/2 phase (center of the window),
+    // and distance from the center of the screen determines k.
 
-    // Between 0 and 1.
-    // y increases up. gl_FragCoord.y increases down.
-    float y = 1 - (float(gl_FragCoord.y) / screen_hy);
+    // unit: px
+    uint screen_diameter_px = min(screen_x_px, screen_y_px);
+    screen_diameter_px = max(screen_diameter_px, 1);
+
+    uint screen_radius_px = screen_diameter_px / 2;
+    screen_radius_px = max(screen_radius_px, 1);
+
+    vec2 screen_px = vec2(screen_x_px, screen_y_px);
+
+    // Between -1 and 1 (or slightly more, depending on aspect ratio).
+    // unit: rel-screen
+    vec2 position_rel = v_position * screen_px / screen_diameter_px;
 
     // time = n/N, between 0 and 2pi.
-    float n_phase = x * TWOPI;
+    float n_phase = atan(position_rel.y, position_rel.x) + TWOPI / 2;
 
     // FFT bin.
-    float k_float = y * (fft_out_size - 1) * (8000. / 24000.);
+    float k_float = length(position_rel) / RADIUS_REL * FREQ_REL * (fft_out_K - 1);
     int k = int(k_float);
     float k_frac = k_float - k;
 
-    if (k < 0 || k + 1 >= fft_out_size) {
-        // should never happen if we calculated k correctly.
-        THROW;
+    if (k < 0 || k + 1 >= fft_out_K) {
+        // Out of bounds. May happen if screen is very tall or wide, and circle is small.
+        return;
     }
 
     vec3 brightness = mix(value(k, n_phase), value(k + 1, n_phase), k_frac);
