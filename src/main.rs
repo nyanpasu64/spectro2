@@ -237,6 +237,8 @@ fn fft_as_pod(my_slice: &FftSlice) -> &PodSlice {
 #[repr(C)]
 #[derive(Copy, Clone)]
 struct GpuFftLayout {
+    screen_wx: u32,
+    screen_hy: u32,
     fft_out_size: u32,
 }
 
@@ -337,6 +339,8 @@ impl State {
 
         // # FFT SSBO
         let fft_layout = GpuFftLayout {
+            screen_wx: size.width,
+            screen_hy: size.height,
             fft_out_size: FFT_OUT_SIZE as u32,
         };
         let fft_vec: PodVec = vec![PodComplex(Zero::zero()); FFT_OUT_SIZE];
@@ -466,12 +470,18 @@ impl State {
     }
 
     fn update(&mut self, spectrum: &FftSlice) {
-        self.fft_vec.copy_from_slice(fft_as_pod(spectrum));
+        self.fft_layout = GpuFftLayout {
+            screen_wx: self.size.width,
+            screen_hy: self.size.height,
+            ..self.fft_layout
+        };
         self.queue.write_buffer(
             &self.fft_layout_buffer,
             0,
             bytemuck::cast_slice(slice::from_ref(&self.fft_layout)),
         );
+
+        self.fft_vec.copy_from_slice(fft_as_pod(spectrum));
         self.queue
             .write_buffer(&self.fft_vec_buffer, 0, bytemuck::cast_slice(&self.fft_vec));
     }
