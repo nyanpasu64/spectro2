@@ -30,7 +30,7 @@ rpath = false
 # Build all dependencies optimized, but reduce optimization for this crate
 # Only enable incremental builds for this crate
 [profile.dev.package.spectro2]
-opt-level = 1
+opt-level = 0
 incremental = true
 
 # Only enable incremental builds for this crate
