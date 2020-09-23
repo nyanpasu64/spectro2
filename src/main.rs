@@ -15,7 +15,7 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-const FFT_INPUT_SIZE: usize = 512;
+const FFT_INPUT_SIZE: usize = 1024;
 
 static NEXT_FFT: AtomicOptionBox<FftVec> = AtomicOptionBox::new_none();
 static FFT_AVAILABLE: AtomicBool = AtomicBool::new(false);
