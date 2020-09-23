@@ -25,6 +25,12 @@ const float TWOPI = 6.28318530717958647693;
 
 const float BACKGROUND = 0;
 const bool RESCALE = true;
+const bool HIDE_LEFT = true;
+const float X_OFFSET = 0.75;
+
+float unipolar(float bipolar) {
+    return (bipolar + 1) / 2;
+}
 
 vec3 value(int k, float n_phase) {
     vec2 val = spectrum[k] * 10.;
@@ -34,12 +40,16 @@ vec3 value(int k, float n_phase) {
         // loud inputs. should this branch be removed?
         return vec3(1, 0, 1);
     }
+    if (HIDE_LEFT) {
+        val_mag *= unipolar(cos(n_phase + TWOPI / 2));
+    }
+
     float val_angle = atan(val.y, val.x);
 
     // Compute real component of DFT.
     float unit = cos(val_angle + k * n_phase);
     if (RESCALE) {
-        unit = 0.5 + unit / 2;
+        unit = unipolar(unit);
     }
 
     float value = BACKGROUND + unit * val_mag;
@@ -70,7 +80,7 @@ void main() {
 
     // Between -1 and 1 (or slightly more, depending on aspect ratio).
     // unit: rel-screen
-    vec2 position_rel = v_position * screen_px / screen_diameter_px;
+    vec2 position_rel = (v_position + vec2(X_OFFSET, 0)) * screen_px / screen_diameter_px;
 
     // time = n/N, between 0 and 2pi.
     float n_phase = atan(position_rel.y, position_rel.x) + TWOPI / 2;
