@@ -52,8 +52,11 @@ void main() {
     f_color = vec4(0,0,0,0);
 
     // Between 0 and 1.
-    float x = (v_position.x + 1) / 2;
-    float y = (v_position.y + 1) / 2;
+    float x = float(gl_FragCoord.x) / screen_wx;
+
+    // Between 0 and 1.
+    // y increases up. gl_FragCoord.y increases down.
+    float y = 1 - (float(gl_FragCoord.y) / screen_hy);
 
     // time = n/N, between 0 and 2pi.
     float n_phase = x * TWOPI;
