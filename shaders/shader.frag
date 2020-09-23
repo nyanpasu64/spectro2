@@ -23,6 +23,9 @@ const float TWOPI = 6.28318530717958647693;
 
 #define THROW f_color = vec4(1, 0, 1, 1); return
 
+const float BACKGROUND = 0.01;
+const bool RESCALE = false;
+
 vec3 value(int k, float n_phase) {
     vec2 val = spectrum[k] * 10.;
 
@@ -35,11 +38,11 @@ vec3 value(int k, float n_phase) {
 
     // Compute real component of DFT.
     float unit = cos(val_angle + k * n_phase);
+    if (RESCALE) {
+        unit = 0.5 + unit / 2;
+    }
 
-    // Convert to [0, 1] (in this case, hard threshold).
-    unit = (unit + 1) / 2;
-
-    float value = unit * val_mag;
+    float value = BACKGROUND + unit * val_mag;
     return value.xxx;
 }
 
@@ -83,5 +86,5 @@ void main() {
     }
 
     vec3 brightness = mix(value(k, n_phase), value(k + 1, n_phase), k_frac);
-    f_color = vec4(brightness + 0.01, 1.0);
+    f_color = vec4(brightness, 1.0);
 }
