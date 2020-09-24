@@ -73,12 +73,15 @@ struct Opt {
     volume: f32,
 
     /// Number of samples to use in each FFT block.
-    /// Defaults to 1024.
+    /// Increasing this value makes it easier to identify pitches,
+    /// but increases audio latency and smearing in time.
     #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_fft_size))]
     fft_size: usize,
 
     /// Number of samples to advance time before recalculating FFT.
-    /// Defaults to 1024.
+    /// Decreasing this value causes FFTs to be computed more often,
+    /// increasing CPU usage but reducing latency and stuttering.
+    ///
     /// If this value exceeds --fft-size, it is clamped to it.
     #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_redraw_size))]
     redraw_size: usize,
