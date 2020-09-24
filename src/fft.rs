@@ -82,8 +82,8 @@ impl FftBuffer {
 
             // current: Vec::with_capacity(size),
             buffer: Vec::with_capacity(cfg.size),
-            scratch: vec![Zero::zero(); cfg.size],
-            spectrum: vec![Zero::zero(); cfg.size / 2 + 1],
+            scratch: vec![0.; cfg.size],
+            spectrum: vec![FftSample::zero(); cfg.size / 2 + 1],
         }
     }
 

@@ -1,12 +1,14 @@
 mod fft;
 
 use anyhow::{Error, Result};
-use atomicbox::AtomicOptionBox;
+use atomicbox::AtomicBox;
 use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
 use rustfft::num_traits::Zero;
-use std::{cmp::min, fs::File, io::Read, path::PathBuf, slice, sync::atomic::AtomicBool};
+use std::{
+    cmp::min, fs::File, io::Read, path::PathBuf, slice, sync::atomic::AtomicBool, sync::Arc,
+};
 use wgpu::util::DeviceExt;
 use winit::{
     dpi::PhysicalSize,
@@ -17,9 +19,6 @@ use winit::{
 
 const MIN_FFT_SIZE: usize = 4;
 const MAX_FFT_SIZE: usize = 16384;
-
-static NEXT_FFT: AtomicOptionBox<FftVec> = AtomicOptionBox::new_none();
-static FFT_AVAILABLE: AtomicBool = AtomicBool::new(false);
 
 use structopt::StructOpt;
 
@@ -85,6 +84,20 @@ struct Opt {
     /// If this value exceeds --fft-size, it is clamped to it.
     #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_redraw_size))]
     redraw_size: usize,
+}
+
+struct AtomicSpectrum {
+    data: AtomicBox<FftVec>,
+    available: AtomicBool,
+}
+
+impl AtomicSpectrum {
+    fn new(spectrum_size: usize) -> AtomicSpectrum {
+        AtomicSpectrum {
+            data: AtomicBox::new(Box::new(vec![FftSample::zero(); spectrum_size])),
+            available: false.into(),
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -173,26 +186,28 @@ fn main() -> Result<()> {
         window_type: WindowType::Hann,
     });
     let spectrum_size = fft_vec_buffer.spectrum_size();
-    let new_spectrum_box =
-        || -> Option<Box<FftVec>> { Some(Box::new(vec![Zero::zero(); spectrum_size])) };
+    let new_spectrum_box = || Box::new(vec![FftSample::zero(); spectrum_size]);
+
+    let atomic_fft = Arc::new(AtomicSpectrum::new(spectrum_size));
 
     let stream = {
-        {
-            let old_global = NEXT_FFT.swap(new_spectrum_box(), Ordering::AcqRel);
-            assert_eq!(old_global, None);
-        }
-
-        let mut scratch_fft: Option<Box<FftVec>> = new_spectrum_box();
+        let mut scratch_fft = Some(new_spectrum_box());
+        let atomic_fft = atomic_fft.clone();
         let mut spectrum_callback = move |spectrum: &FftSlice| {
-            {
-                let scratch_fft = scratch_fft
-                    .as_deref_mut()
-                    .expect("extra_fft/NEXT_FFT should never be None");
-                scratch_fft.copy_from_slice(spectrum);
-            }
+            scratch_fft
+                .as_deref_mut()
+                .unwrap()
+                .copy_from_slice(spectrum);
 
-            scratch_fft = NEXT_FFT.swap(scratch_fft.take(), Ordering::AcqRel);
-            FFT_AVAILABLE.store(true, Ordering::Release);
+            scratch_fft = Some(
+                atomic_fft
+                    .data
+                    .swap(scratch_fft.take().unwrap(), Ordering::AcqRel),
+            );
+            // If atomic_fft.data gets read and swapped before we write true,
+            // the next swap will receive stale data.
+            // This is possible but rare and probably doesn't matter.
+            atomic_fft.available.store(true, Ordering::Release);
         };
 
         device
@@ -229,7 +244,7 @@ fn main() -> Result<()> {
 
     // Since main can't be async, we're going to need to block
     let mut state = block_on(State::new(&window, &opt))?;
-    let mut received_fft = new_spectrum_box();
+    let mut received_fft = Some(new_spectrum_box());
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -259,21 +274,19 @@ fn main() -> Result<()> {
             }
         }
         Event::RedrawRequested(_) => {
-            if FFT_AVAILABLE.load(Ordering::Acquire) {
-                FFT_AVAILABLE.store(false, Ordering::Relaxed);
-                received_fft = NEXT_FFT.swap(received_fft.take(), Ordering::AcqRel);
-                assert!(
-                    received_fft.is_some(),
-                    "FFT_AVAILABLE is true yet NEXT_FFT is None"
+            // might as well take the "yolo" approach,
+            // and just ignore the possibility of occasional single-frame desyncs
+            // and stale/missing updates.
+            // this code needs to be rewritten once I add multi-frame history.
+            if atomic_fft.available.swap(false, Ordering::Acquire) {
+                received_fft = Some(
+                    atomic_fft
+                        .data
+                        .swap(received_fft.take().unwrap(), Ordering::AcqRel),
                 );
             }
 
-            state.update(
-                received_fft
-                    .as_deref()
-                    .expect("stale_fft should never be None")
-                    .as_slice(),
-            );
+            state.update(received_fft.as_deref().unwrap().as_slice());
             state.render();
         }
         Event::MainEventsCleared => {
@@ -416,7 +429,7 @@ impl State {
             screen_hy: size.height,
             fft_out_size: fft_out_size as u32,
         };
-        let fft_vec: PodVec = vec![PodComplex(Zero::zero()); fft_out_size];
+        let fft_vec: PodVec = vec![PodComplex(FftSample::zero()); fft_out_size];
 
         let fft_layout_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("FFT layout (size)"),
