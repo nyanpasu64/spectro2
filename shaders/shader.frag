@@ -55,10 +55,24 @@ vec3 value(int k, float n_phase) {
     return value.xxx;
 }
 
-// unit: half-cycle
-const float FREQ_REL = 4000. / 24000.;
-// unit: rel-screen
-const float RADIUS_REL = 0.8;
+float lin_scale_k(float px_radius) {
+    // unit: half-cycle
+    const float FREQ_REL = 4000. / 24000.;
+    // unit: rel-screen
+    const float RADIUS_REL = 0.8;
+
+    return px_radius / RADIUS_REL * FREQ_REL * (fft_out_K - 1);
+}
+
+float log_scale_k(float px_radius) {
+    // unit: half-cycle
+    const float FREQ_REL = 20. / 24000.;
+    // unit: rel-screen
+    const float RADIUS_REL = 0.;
+    const float OCTAVES = 6;
+
+    return pow(2, OCTAVES * (px_radius - RADIUS_REL)) * FREQ_REL * (fft_out_K - 1);
+}
 
 void main() {
     f_color = vec4(0, 0, 0, 1);
@@ -86,7 +100,7 @@ void main() {
     float n_phase = atan(position_rel.y, position_rel.x) + TWOPI / 2 - CENTER_ANGLE;
 
     // FFT bin.
-    float k_float = length(position_rel) / RADIUS_REL * FREQ_REL * (fft_out_K - 1);
+    float k_float = lin_scale_k(length(position_rel));
     int k = int(k_float);
     float k_frac = k_float - k;
 
