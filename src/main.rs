@@ -266,7 +266,7 @@ fn main() -> Result<()> {
 
             state.update(
                 received_fft
-                    .as_ref()
+                    .as_deref()
                     .expect("stale_fft should never be None")
                     .as_slice(),
             );
