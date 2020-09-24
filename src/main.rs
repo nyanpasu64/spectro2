@@ -215,7 +215,8 @@ fn main() -> Result<()> {
             width: 1024,
             height: 1024,
         });
-        if cfg!(windows) {
+        #[cfg(target_os = "windows")]
+        {
             // Work around cpal/winit crash.
             // https://github.com/amethyst/amethyst/issues/2218
             use winit::platform::windows::WindowBuilderExtWindows;
