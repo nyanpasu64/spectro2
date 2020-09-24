@@ -11,6 +11,7 @@ layout(set=0, binding=0)
 uniform GpuFftLayout {
     uint screen_x_px;
     uint screen_y_px;
+    uint sample_rate;
     uint fft_out_K;
 };
 
@@ -55,8 +56,7 @@ vec3 value(int k, float n_phase) {
     return value.xxx;
 }
 
-const float SAMPLING_RATE = 48000.;
-const float NYQUIST_HZ = SAMPLING_RATE / 2.;
+#define NYQUIST_HZ  (sample_rate / 2.)
 
 float square(float x) {
     return x * x;

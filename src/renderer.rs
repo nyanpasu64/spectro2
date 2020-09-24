@@ -24,17 +24,24 @@ fn fft_as_pod(my_slice: &FftSlice) -> &PodSlice {
     unsafe { std::slice::from_raw_parts(my_slice.as_ptr() as *const _, my_slice.len()) }
 }
 
-/// Sent to GPU. The value equals FFT_OUT_SIZE (but is a different type).
+/// Sent to GPU. Controls FFT layout and options.
 #[repr(C)]
 #[derive(Copy, Clone)]
-struct GpuFftLayout {
+struct GpuRenderParameters {
+    /// Screen size.
     screen_wx: u32,
     screen_hy: u32,
+
+    /// Samples per second.
+    sample_rate: u32,
+
+    /// Number of FFT bins between 0 and Nyquist inclusive.
+    /// Equals nsamp/2 + 1.
     fft_out_size: u32,
 }
 
-unsafe impl bytemuck::Zeroable for GpuFftLayout {}
-unsafe impl bytemuck::Pod for GpuFftLayout {}
+unsafe impl bytemuck::Zeroable for GpuRenderParameters {}
+unsafe impl bytemuck::Pod for GpuRenderParameters {}
 
 /// The longest allowed FFT is ???.
 /// The real FFT produces ??? complex bins.
@@ -55,10 +62,10 @@ pub struct State {
     size: winit::dpi::PhysicalSize<u32>,
     render_pipeline: wgpu::RenderPipeline,
 
-    fft_layout: GpuFftLayout,
+    render_parameters: GpuRenderParameters,
     fft_vec: PodVec,
 
-    fft_layout_buffer: wgpu::Buffer,
+    render_parameters_buffer: wgpu::Buffer,
     fft_vec_buffer: wgpu::Buffer,
 
     bind_group: wgpu::BindGroup,
@@ -72,7 +79,7 @@ fn load_from_file(fname: &str) -> Result<String> {
 
 impl State {
     // Creating some of the wgpu types requires async code
-    pub async fn new(window: &Window, opt: &Opt) -> anyhow::Result<State> {
+    pub async fn new(window: &Window, opt: &Opt, sample_rate: u32) -> anyhow::Result<State> {
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
@@ -132,16 +139,17 @@ impl State {
 
         // # FFT SSBO
         let fft_out_size = fft_out_size(opt.fft_size);
-        let fft_layout = GpuFftLayout {
+        let render_parameters = GpuRenderParameters {
             screen_wx: size.width,
             screen_hy: size.height,
             fft_out_size: fft_out_size as u32,
+            sample_rate,
         };
         let fft_vec: PodVec = vec![PodComplex(FftSample::zero()); fft_out_size];
 
-        let fft_layout_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let render_param_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("FFT layout (size)"),
-            contents: bytemuck::cast_slice(slice::from_ref(&fft_layout)),
+            contents: bytemuck::cast_slice(slice::from_ref(&render_parameters)),
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         });
         let fft_vec_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -180,7 +188,7 @@ impl State {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(fft_layout_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer(render_param_buffer.slice(..)),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -244,9 +252,9 @@ impl State {
             swap_chain,
             size,
             render_pipeline,
-            fft_layout,
+            render_parameters,
             fft_vec,
-            fft_layout_buffer,
+            render_parameters_buffer: render_param_buffer,
             fft_vec_buffer,
             bind_group,
         })
@@ -264,15 +272,15 @@ impl State {
     }
 
     pub fn update(&mut self, spectrum: &FftSlice) {
-        self.fft_layout = GpuFftLayout {
+        self.render_parameters = GpuRenderParameters {
             screen_wx: self.size.width,
             screen_hy: self.size.height,
-            ..self.fft_layout
+            ..self.render_parameters
         };
         self.queue.write_buffer(
-            &self.fft_layout_buffer,
+            &self.render_parameters_buffer,
             0,
-            bytemuck::cast_slice(slice::from_ref(&self.fft_layout)),
+            bytemuck::cast_slice(slice::from_ref(&self.render_parameters)),
         );
 
         self.fft_vec.copy_from_slice(fft_as_pod(spectrum));
