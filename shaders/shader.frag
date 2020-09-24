@@ -27,7 +27,7 @@ const float BACKGROUND = 0;
 const bool RESCALE = true;
 
 const float CENTER_ANGLE = 0;
-const bool HIDE_SIDES = true;  // Hide side of window (where signal is out of phase).
+const bool HIDE_SIDES = false;  // Hide side of window (where signal is out of phase).
 
 const vec2 OFFSET = vec2(0.75, 0);
 
