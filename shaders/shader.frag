@@ -55,9 +55,27 @@ vec3 value(int k, float n_phase) {
     return value.xxx;
 }
 
+const float SAMPLING_RATE = 48000.;
+const float NYQUIST_HZ = SAMPLING_RATE / 2.;
+
+float square(float x) {
+    return x * x;
+}
+
+float sqrt_scale_k(float px_radius) {
+    // unit: half-cycle
+    const float FREQ_FLOOR = 20. / NYQUIST_HZ;
+    // unit: half-cycle
+    const float FREQ_REL = 6000. / NYQUIST_HZ;
+    // unit: rel-screen
+    const float RADIUS_REL = 0.8;
+
+    return square(FREQ_FLOOR + px_radius / RADIUS_REL * FREQ_REL) * (fft_out_K - 1);
+}
+
 float lin_scale_k(float px_radius) {
     // unit: half-cycle
-    const float FREQ_REL = 4000. / 24000.;
+    const float FREQ_REL = 4000. / NYQUIST_HZ;
     // unit: rel-screen
     const float RADIUS_REL = 0.8;
 
@@ -66,7 +84,7 @@ float lin_scale_k(float px_radius) {
 
 float log_scale_k(float px_radius) {
     // unit: half-cycle
-    const float FREQ_REL = 20. / 24000.;
+    const float FREQ_REL = 20. / NYQUIST_HZ;
     // unit: rel-screen
     const float RADIUS_REL = 0.;
     const float OCTAVES = 6;
