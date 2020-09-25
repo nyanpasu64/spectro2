@@ -141,10 +141,16 @@ impl FftBuffer {
             (&mut self.scratch).copy_from_slice(&self.buffer);
         }
 
+        // Phase-shift in time domain, so peak of window lies at sample 0.
+        let N = self.scratch.len();
+        self.scratch.rotate_right(N / 2);
+
         swap(&mut self.frame.spectrum, &mut self.frame.prev_spectrum);
         self.fft
             .process(&mut self.scratch, &mut self.frame.spectrum)
             .unwrap();
+
+        // Normalize transform, so longer inputs don't produce larger spectrum values.
         for elem in self.frame.spectrum.iter_mut() {
             *elem *= self.cfg.volume / self.buffer.len() as f32;
         }

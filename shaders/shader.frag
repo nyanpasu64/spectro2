@@ -41,7 +41,7 @@ vec3 value(int k, float n_phase) {
 
     float val_mag = length(val);
     if (HIDE_SIDES) {
-        val_mag *= unipolar(cos(n_phase + TWOPI / 2));
+        val_mag *= unipolar(cos(n_phase));
     }
 
     float val_angle = atan(val.y, val.x);
@@ -115,7 +115,7 @@ void main() {
 
     // time = n/N, between 0 and 2pi.
     // CENTER_ANGLE should map to TWOPI/2 (center of window)
-    float n_phase = atan(position_rel.y, position_rel.x) + TWOPI / 2 - CENTER_ANGLE;
+    float n_phase = atan(position_rel.y, position_rel.x) - CENTER_ANGLE;
 
     // FFT bin.
     float k_float = sqrt_scale_k(length(position_rel));
