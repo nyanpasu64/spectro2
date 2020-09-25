@@ -1,5 +1,4 @@
-use crate::fft::*;
-use crate::Opt;
+use crate::{fft::*, Opt};
 use anyhow::Result;
 use rustfft::num_traits::Zero;
 use std::{fs::File, io::Read, path::PathBuf, slice};
@@ -65,7 +64,7 @@ pub struct State {
     render_parameters: GpuRenderParameters,
     fft_vec: PodVec,
 
-    render_parameters_buffer: wgpu::Buffer,
+    render_param_buffer: wgpu::Buffer,
     fft_vec_buffer: wgpu::Buffer,
 
     bind_group: wgpu::BindGroup,
@@ -254,7 +253,7 @@ impl State {
             render_pipeline,
             render_parameters,
             fft_vec,
-            render_parameters_buffer: render_param_buffer,
+            render_param_buffer,
             fft_vec_buffer,
             bind_group,
         })
@@ -278,7 +277,7 @@ impl State {
             ..self.render_parameters
         };
         self.queue.write_buffer(
-            &self.render_parameters_buffer,
+            &self.render_param_buffer,
             0,
             bytemuck::cast_slice(slice::from_ref(&self.render_parameters)),
         );
