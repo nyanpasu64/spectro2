@@ -246,7 +246,7 @@ fn main() -> Result<()> {
     let window = {
         let mut window_builder = WindowBuilder::new().with_inner_size(PhysicalSize {
             width: 1024,
-            height: 1024,
+            height: 768,
         });
         #[cfg(target_os = "windows")]
         {
