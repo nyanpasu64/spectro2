@@ -84,15 +84,30 @@ pub struct Opt {
     redraw_size: usize,
 }
 
+/// The data to be rendered in one frame.
+pub struct SpectrumFrame {
+    spectrum: FftVec,
+    prev_spectrum: FftVec,
+}
+
+impl SpectrumFrame {
+    fn new(spectrum_size: usize) -> SpectrumFrame {
+        SpectrumFrame {
+            spectrum: vec![FftSample::zero(); spectrum_size],
+            prev_spectrum: vec![FftSample::zero(); spectrum_size],
+        }
+    }
+}
+
 struct AtomicSpectrum {
-    data: AtomicBox<FftVec>,
+    data: AtomicBox<SpectrumFrame>,
     available: AtomicBool,
 }
 
 impl AtomicSpectrum {
     fn new(spectrum_size: usize) -> AtomicSpectrum {
         AtomicSpectrum {
-            data: AtomicBox::new(Box::new(vec![FftSample::zero(); spectrum_size])),
+            data: AtomicBox::new(Box::new(SpectrumFrame::new(spectrum_size))),
             available: false.into(),
         }
     }
@@ -186,18 +201,21 @@ fn main() -> Result<()> {
         window_type: WindowType::Hann,
     });
     let spectrum_size = fft_vec_buffer.spectrum_size();
-    let new_spectrum_box = || Box::new(vec![FftSample::zero(); spectrum_size]);
+    let new_frame = || Box::new(SpectrumFrame::new(spectrum_size));
 
     let atomic_fft = Arc::new(AtomicSpectrum::new(spectrum_size));
 
     let stream = {
-        let mut scratch_fft = Some(new_spectrum_box());
+        let mut scratch_fft = Some(new_frame());
         let atomic_fft = atomic_fft.clone();
-        let mut spectrum_callback = move |spectrum: &FftSlice| {
-            scratch_fft
-                .as_deref_mut()
-                .unwrap()
-                .copy_from_slice(spectrum);
+        let mut spectrum_callback = move |frame: &SpectrumFrame| {
+            {
+                let scratch_fft = scratch_fft.as_deref_mut().unwrap();
+                scratch_fft.spectrum.copy_from_slice(&frame.spectrum);
+                scratch_fft
+                    .prev_spectrum
+                    .copy_from_slice(&frame.prev_spectrum);
+            }
 
             scratch_fft = Some(
                 atomic_fft
@@ -242,7 +260,7 @@ fn main() -> Result<()> {
 
     // Since main can't be async, we're going to need to block
     let mut state = block_on(renderer::State::new(&window, &opt, config.sample_rate.0))?;
-    let mut received_fft = Some(new_spectrum_box());
+    let mut received_fft = Some(new_frame());
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -284,7 +302,10 @@ fn main() -> Result<()> {
                 );
             }
 
-            state.update(received_fft.as_deref().unwrap().as_slice());
+            {
+                let received_fft = received_fft.as_deref().unwrap();
+                state.update(received_fft.spectrum.as_slice());
+            }
             state.render();
         }
         Event::MainEventsCleared => {

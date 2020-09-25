@@ -1,7 +1,8 @@
+use crate::SpectrumFrame;
 use cpal::ChannelCount;
 use dsp::window::Window;
 use rustfft::num_complex::Complex;
-use rustfft::num_traits::Zero;
+use std::mem::swap;
 
 pub type RealVec = Vec<f32>;
 
@@ -9,7 +10,7 @@ pub type FftSample = Complex<f32>;
 pub type FftVec = Vec<FftSample>;
 pub type FftSlice = [FftSample];
 
-pub type FftCallback<'a> = &'a mut dyn FnMut(&FftSlice);
+pub type FftCallback<'a> = &'a mut dyn FnMut(&SpectrumFrame);
 
 /// How to window the FFT to reduce sidelobes.
 #[allow(dead_code)]
@@ -60,7 +61,7 @@ pub struct FftBuffer {
     // Mutable state.
     buffer: RealVec,
     scratch: RealVec,
-    spectrum: FftVec,
+    frame: SpectrumFrame,
 }
 
 impl FftBuffer {
@@ -84,12 +85,12 @@ impl FftBuffer {
             // current: Vec::with_capacity(size),
             buffer: Vec::with_capacity(cfg.size),
             scratch: vec![0.; cfg.size],
-            spectrum: vec![FftSample::zero(); cfg.size / 2 + 1],
+            frame: SpectrumFrame::new(cfg.size / 2 + 1),
         }
     }
 
     pub fn spectrum_size(&self) -> usize {
-        self.spectrum.len()
+        self.frame.spectrum.len()
     }
 
     /// input.len() must be a multiple of channels.
@@ -110,8 +111,8 @@ impl FftBuffer {
             self.buffer.push(avg);
 
             if self.buffer.len() == self.buffer.capacity() {
-                (&mut *self).run_fft();
-                fft_callback(&self.spectrum);
+                self.run_fft(); // mutates self
+                fft_callback(&self.frame);
 
                 // Remove the first `redraw_interval` samples from the vector,
                 // such that `redraw_interval` samples must be pushed
@@ -128,6 +129,7 @@ impl FftBuffer {
     /// - self.scratch.len() == self.cfg.size (via initialization).
     ///
     /// Postconditions:
+    /// - self.prev_spectrum contains the prior value of self.spectrum.
     /// - self.spectrum contains the windowed FFT of self.buffer.
     /// - self.buffer is unchanged.
     fn run_fft(&mut self) {
@@ -139,10 +141,11 @@ impl FftBuffer {
             (&mut self.scratch).copy_from_slice(&self.buffer);
         }
 
+        swap(&mut self.frame.spectrum, &mut self.frame.prev_spectrum);
         self.fft
-            .process(&mut self.scratch, &mut self.spectrum)
+            .process(&mut self.scratch, &mut self.frame.spectrum)
             .unwrap();
-        for elem in self.spectrum.iter_mut() {
+        for elem in self.frame.spectrum.iter_mut() {
             *elem *= self.cfg.volume / self.buffer.len() as f32;
         }
     }
