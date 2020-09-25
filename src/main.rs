@@ -1,3 +1,5 @@
+// DFT/FFT math formulas have uppercase variables.
+#![allow(non_snake_case)]
 mod fft;
 mod renderer;
 
