@@ -1,5 +1,6 @@
-use crate::{fft::*, Opt};
+use crate::{fft::*, Opt, SpectrumFrame};
 use anyhow::Result;
+use itertools::izip;
 use rustfft::num_traits::Zero;
 use std::{fs::File, io::Read, path::PathBuf, slice};
 use wgpu::util::DeviceExt;
@@ -270,7 +271,7 @@ impl State {
         false
     }
 
-    pub fn update(&mut self, spectrum: &FftSlice) {
+    pub fn update(&mut self, frame: &SpectrumFrame) {
         self.render_parameters = GpuRenderParameters {
             screen_wx: self.size.width,
             screen_hy: self.size.height,
@@ -282,7 +283,22 @@ impl State {
             bytemuck::cast_slice(slice::from_ref(&self.render_parameters)),
         );
 
-        self.fft_vec.copy_from_slice(fft_as_pod(spectrum));
+        const PHASE_DERIVATIVE: bool = true;
+
+        assert_eq!(self.fft_vec.len(), frame.spectrum.len());
+        assert_eq!(self.fft_vec.len(), frame.prev_spectrum.len());
+        if PHASE_DERIVATIVE {
+            for (out, curr, prev) in izip!(&mut self.fft_vec, &frame.spectrum, &frame.prev_spectrum)
+            {
+                *out = PodComplex(FftSample::from_polar(
+                    &curr.norm(),
+                    &(curr.arg() - prev.arg()),
+                ))
+            }
+        } else {
+            self.fft_vec.copy_from_slice(fft_as_pod(&frame.spectrum));
+        }
+
         self.queue
             .write_buffer(&self.fft_vec_buffer, 0, bytemuck::cast_slice(&self.fft_vec));
     }

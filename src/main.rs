@@ -304,7 +304,7 @@ fn main() -> Result<()> {
 
             {
                 let received_fft = received_fft.as_deref().unwrap();
-                state.update(received_fft.spectrum.as_slice());
+                state.update(received_fft);
             }
             state.render();
         }
