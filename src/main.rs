@@ -74,6 +74,7 @@ pub struct Opt {
     /// Number of samples to use in each FFT block.
     /// Increasing this value makes it easier to identify pitches,
     /// but increases audio latency and smearing in time.
+    /// Must be a multiple of --redraw-size.
     #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_fft_size))]
     fft_size: usize,
 
@@ -82,8 +83,26 @@ pub struct Opt {
     /// increasing CPU usage but reducing latency and stuttering.
     ///
     /// If this value exceeds --fft-size, it is clamped to it.
+    /// Otherwise must be a factor of --fft-size.
     #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_redraw_size))]
     redraw_size: usize,
+}
+
+impl Opt {
+    fn parse_validate(&mut self) -> Result<()> {
+        // Clamp redraw_size down to fft_size.
+        self.redraw_size = min(self.redraw_size, self.fft_size);
+
+        // Ensure redraw_size is a factor of fft_size.
+        if self.fft_size / self.redraw_size * self.redraw_size != self.fft_size {
+            return Err(Error::msg(format!(
+                "FFT size {} must be a multiple of redraw size {}",
+                self.fft_size, self.redraw_size
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 /// The data to be rendered in one frame.
@@ -118,7 +137,8 @@ impl AtomicSpectrum {
 fn main() -> Result<()> {
     env_logger::init();
 
-    let opt = Opt::from_args();
+    let mut opt = Opt::from_args();
+    opt.parse_validate()?;
 
     println!("");
 
@@ -198,7 +218,7 @@ fn main() -> Result<()> {
     let mut fft_vec_buffer = FftBuffer::new(FftConfig {
         volume: opt.volume,
         size: opt.fft_size,
-        redraw_interval: min(opt.redraw_size, opt.fft_size),
+        redraw_interval: opt.redraw_size,
         channels: config.channels,
         window_type: WindowType::Hann,
     });

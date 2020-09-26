@@ -34,7 +34,7 @@ pub struct FftConfig {
     pub size: usize,
 
     /// How many samples to advance before the next FFT.
-    /// Must be <= size.
+    /// Must be a factor of size.
     pub redraw_interval: usize,
 
     /// The incoming wave is [frame][channel]i16.
@@ -45,7 +45,6 @@ pub struct FftConfig {
     /// How to window the input signal to reduce sidelobes.
     pub window_type: WindowType,
     // TODO downmix: bool,
-    // TODO add option to overlap by 50%.
     // TODO add option for whether to allow multiple calls in the same push.
 }
 
@@ -69,6 +68,10 @@ impl FftBuffer {
         assert!(cfg.size >= 2);
         assert!(cfg.channels >= 1);
         assert!(cfg.redraw_interval <= cfg.size);
+        assert_eq!(
+            cfg.size / cfg.redraw_interval * cfg.redraw_interval,
+            cfg.size
+        );
 
         let fft = realfft::RealToComplex::<f32>::new(cfg.size).unwrap();
 
