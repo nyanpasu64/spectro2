@@ -118,7 +118,7 @@ void main() {
     float n_phase = atan(position_rel.y, position_rel.x) + TWOPI / 2 - CENTER_ANGLE;
 
     // FFT bin.
-    float k_float = lin_scale_k(length(position_rel));
+    float k_float = sqrt_scale_k(length(position_rel));
     int k = int(k_float);
     float k_frac = k_float - k;
 
