@@ -68,14 +68,14 @@ pub struct Opt {
 
     /// How much to amplify the incoming signal
     /// before sending it to the spectrum viewer.
-    #[structopt(short, long, default_value = "10")]
+    #[structopt(short, long, default_value = "20")]
     volume: f32,
 
     /// Number of samples to use in each FFT block.
     /// Increasing this value makes it easier to identify pitches,
     /// but increases audio latency and smearing in time.
     /// Must be a multiple of --redraw-size.
-    #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_fft_size))]
+    #[structopt(short, long, default_value = "2048", parse(try_from_str = parse_fft_size))]
     fft_size: usize,
 
     /// Number of samples to advance time before recalculating FFT.
@@ -84,7 +84,7 @@ pub struct Opt {
     ///
     /// If this value exceeds --fft-size, it is clamped to it.
     /// Otherwise must be a factor of --fft-size.
-    #[structopt(short, long, default_value = "1024", parse(try_from_str = parse_redraw_size))]
+    #[structopt(short, long, default_value = "512", parse(try_from_str = parse_redraw_size))]
     redraw_size: usize,
 }
 
