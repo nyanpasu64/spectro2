@@ -12,6 +12,7 @@ pub type FftSlice = [FftSample];
 pub type FftCallback<'a> = &'a mut dyn FnMut(&FftSlice);
 
 /// How to window the FFT to reduce sidelobes.
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub enum WindowType {
     Rect,
