@@ -1,8 +1,8 @@
-use crate::SpectrumFrame;
+use crate::SpectrumFrameRef;
 use cpal::ChannelCount;
 use dsp::window::Window;
 use rustfft::num_complex::Complex;
-use std::mem::swap;
+use rustfft::num_traits::Zero;
 
 pub type RealVec = Vec<f32>;
 
@@ -10,7 +10,7 @@ pub type FftSample = Complex<f32>;
 pub type FftVec = Vec<FftSample>;
 pub type FftSlice = [FftSample];
 
-pub type FftCallback<'a> = &'a mut dyn FnMut(&SpectrumFrame);
+pub type FftCallback<'a> = &'a mut dyn FnMut(SpectrumFrameRef);
 
 /// How to window the FFT to reduce sidelobes.
 #[allow(dead_code)]
@@ -48,6 +48,54 @@ pub struct FftConfig {
     // TODO add option for whether to allow multiple calls in the same push.
 }
 
+mod history {
+    /// Always-full circular buffer used as a delay line.
+    pub struct History<T> {
+        items: Vec<T>,
+        index: usize,
+    }
+
+    impl<T> History<T> {
+        pub fn new(item: T, count: usize) -> History<T>
+        where
+            T: Clone,
+        {
+            History {
+                items: vec![item; count],
+                index: 0,
+            }
+        }
+
+        /// The oldest item is the one which will be overwritten next.
+        fn oldest_idx(&self) -> usize {
+            (self.index + 1) % self.items.len()
+        }
+
+        /// The newest item is the one currently accessible.
+        fn newest_index(&self) -> usize {
+            self.index
+        }
+
+        pub fn oldest(&self) -> &T {
+            &self.items[self.oldest_idx()]
+        }
+
+        pub fn newest(&self) -> &T {
+            &self.items[self.newest_index()]
+        }
+
+        pub fn newest_mut(&mut self) -> &mut T {
+            let i = self.newest_index();
+            &mut self.items[i]
+        }
+
+        pub fn advance_newest(&mut self) {
+            self.index = (self.index + 1) % self.items.len();
+        }
+    }
+}
+use history::History;
+
 /// Accepts data from the audio thread, buffers to full FFT blocks, and runs FFT.
 pub struct FftBuffer {
     // User parameters. Do not mutate.
@@ -60,7 +108,9 @@ pub struct FftBuffer {
     // Mutable state.
     buffer: RealVec,
     scratch: RealVec,
-    frame: SpectrumFrame,
+    // We store a history of spectrums,
+    // so we can compare the phase of non-overlapping portions of the signal.
+    spectrum_history: History<FftVec>,
 }
 
 impl FftBuffer {
@@ -73,6 +123,12 @@ impl FftBuffer {
             cfg.size
         );
 
+        // Each FFT is cfg.size long in the time domain.
+        // We compute FFTs every cfg.redraw_interval.
+        // So it takes (history_len * cfg.redraw_interval) FFTs
+        // to get another one which doesn't overlap in the time domain.
+        let history_len = cfg.size / cfg.redraw_interval;
+        let spectrum_size = cfg.size / 2 + 1;
         let fft = realfft::RealToComplex::<f32>::new(cfg.size).unwrap();
 
         FftBuffer {
@@ -88,12 +144,13 @@ impl FftBuffer {
             // current: Vec::with_capacity(size),
             buffer: Vec::with_capacity(cfg.size),
             scratch: vec![0.; cfg.size],
-            frame: SpectrumFrame::new(cfg.size / 2 + 1),
+            // Store entries from 0 through `history_len` ago, inclusive.
+            spectrum_history: History::new(vec![FftSample::zero(); spectrum_size], history_len + 1),
         }
     }
 
     pub fn spectrum_size(&self) -> usize {
-        self.frame.spectrum.len()
+        self.spectrum_history.newest().len()
     }
 
     /// input.len() must be a multiple of channels.
@@ -115,7 +172,10 @@ impl FftBuffer {
 
             if self.buffer.len() == self.buffer.capacity() {
                 self.run_fft(); // mutates self
-                fft_callback(&self.frame);
+                fft_callback(SpectrumFrameRef {
+                    spectrum: self.spectrum_history.newest(),
+                    prev_spectrum: self.spectrum_history.oldest(),
+                });
 
                 // Remove the first `redraw_interval` samples from the vector,
                 // such that `redraw_interval` samples must be pushed
@@ -132,8 +192,7 @@ impl FftBuffer {
     /// - self.scratch.len() == self.cfg.size (via initialization).
     ///
     /// Postconditions:
-    /// - self.prev_spectrum contains the prior value of self.spectrum.
-    /// - self.spectrum contains the windowed FFT of self.buffer.
+    /// - self.spectrum_history is rotated, and the newest entry has been overwritten.
     /// - self.buffer is unchanged.
     fn run_fft(&mut self) {
         if let Some(window) = &self.window {
@@ -148,13 +207,12 @@ impl FftBuffer {
         let N = self.scratch.len();
         self.scratch.rotate_right(N / 2);
 
-        swap(&mut self.frame.spectrum, &mut self.frame.prev_spectrum);
-        self.fft
-            .process(&mut self.scratch, &mut self.frame.spectrum)
-            .unwrap();
+        self.spectrum_history.advance_newest();
+        let spectrum = self.spectrum_history.newest_mut();
+        self.fft.process(&mut self.scratch, spectrum).unwrap();
 
         // Normalize transform, so longer inputs don't produce larger spectrum values.
-        for elem in self.frame.spectrum.iter_mut() {
+        for elem in spectrum {
             *elem *= self.cfg.volume / self.buffer.len() as f32;
         }
     }

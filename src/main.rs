@@ -120,6 +120,11 @@ impl SpectrumFrame {
     }
 }
 
+pub struct SpectrumFrameRef<'a> {
+    spectrum: &'a FftSlice,
+    prev_spectrum: &'a FftSlice,
+}
+
 struct AtomicSpectrum {
     data: AtomicBox<SpectrumFrame>,
     available: AtomicBool,
@@ -230,13 +235,13 @@ fn main() -> Result<()> {
     let stream = {
         let mut scratch_fft = Some(new_frame());
         let atomic_fft = atomic_fft.clone();
-        let mut spectrum_callback = move |frame: &SpectrumFrame| {
+        let mut spectrum_callback = move |frame: SpectrumFrameRef| {
             {
                 let scratch_fft = scratch_fft.as_deref_mut().unwrap();
-                scratch_fft.spectrum.copy_from_slice(&frame.spectrum);
+                scratch_fft.spectrum.copy_from_slice(frame.spectrum);
                 scratch_fft
                     .prev_spectrum
-                    .copy_from_slice(&frame.prev_spectrum);
+                    .copy_from_slice(frame.prev_spectrum);
             }
 
             scratch_fft = Some(
