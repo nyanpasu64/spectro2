@@ -57,7 +57,7 @@ fn parse_redraw_size(src: &str) -> Result<usize> {
 
 /// Real-time phase-magnitude spectrum viewer
 #[derive(StructOpt, Debug)]
-#[structopt(name = "basic")]
+#[structopt(name = "spectro2")]
 pub struct Opt {
     /// If passed, will listen to speaker instead of microphone.
     /// Note that this causes substantial latency (around 180ms),
