@@ -267,17 +267,18 @@ fn main() -> Result<()> {
 
     let event_loop = EventLoop::new();
     let window = {
-        let mut window_builder = WindowBuilder::new().with_inner_size(PhysicalSize {
+        let window_builder = WindowBuilder::new().with_inner_size(PhysicalSize {
             width: 1024,
             height: 768,
         });
         #[cfg(target_os = "windows")]
-        {
+        let window_builder = {
             // Work around cpal/winit crash.
             // https://github.com/amethyst/amethyst/issues/2218
             use winit::platform::windows::WindowBuilderExtWindows;
-            window_builder = window_builder.with_drag_and_drop(false);
-        }
+            window_builder.with_drag_and_drop(false)
+        };
+
         window_builder.build(&event_loop).unwrap()
     };
 
