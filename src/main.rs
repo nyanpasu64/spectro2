@@ -312,7 +312,8 @@ fn main() -> Result<()> {
     use futures::executor::block_on;
 
     // Since main can't be async, we're going to need to block
-    let mut state = block_on(renderer::State::new(&window, &opt, config.sample_rate.0))?;
+    let mut state = block_on(renderer::State::new(&window, &opt, config.sample_rate.0))
+        .context("Failed to initialize renderer")?;
     let mut received_fft = Some(new_frame());
 
     event_loop.run(move |event, _, control_flow| match event {

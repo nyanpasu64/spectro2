@@ -1,5 +1,5 @@
 use crate::{fft::*, Opt, SpectrumFrame};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use itertools::izip;
 use rustfft::num_traits::Zero;
 use std::{fs::File, io::Read, path::PathBuf, slice};
@@ -92,7 +92,7 @@ impl State {
                 compatible_surface: Some(&surface),
             })
             .await
-            .unwrap();
+            .context("Failed to create adapter")?;
 
         let (device, queue) = adapter
             .request_device(
@@ -104,7 +104,7 @@ impl State {
                 None, // Trace path
             )
             .await
-            .unwrap();
+            .context("Failed to create device")?;
 
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
@@ -117,7 +117,8 @@ impl State {
 
         let vs_src = load_from_file("shaders/shader.vert")?;
         let fs_src = load_from_file("shaders/shader.frag")?;
-        let mut compiler = shaderc::Compiler::new().unwrap();
+        let mut compiler =
+            shaderc::Compiler::new().context("Failed to initialize shader compiler")?;
         let vs_spirv = compiler.compile_into_spirv(
             &vs_src,
             shaderc::ShaderKind::Vertex,
