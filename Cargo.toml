@@ -14,8 +14,6 @@ realfft = "0.2.1"
 # Version 0.22.2 crashes when combining with cpal. master doesn't.
 winit = { git = "https://github.com/rust-windowing/winit.git", rev = "47e7aa4" }
 shaderc = "0.6.2"
-env_logger = "0.7.1"
-log = "0.4.11"
 wgpu = "0.6.0"
 futures = "0.3.5"
 bytemuck = "1.4.1"

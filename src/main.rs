@@ -140,8 +140,6 @@ impl AtomicSpectrum {
 }
 
 fn main() -> Result<()> {
-    env_logger::init();
-
     let mut opt = Opt::from_args();
     opt.parse_validate()?;
 
