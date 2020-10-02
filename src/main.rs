@@ -3,7 +3,7 @@
 mod fft;
 mod renderer;
 
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use atomicbox::AtomicBox;
 use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -65,6 +65,11 @@ pub struct Opt {
     /// so both speakers and the visualization are delayed by the same amount.
     #[structopt(short, long)]
     loopback: bool,
+
+    /// If passed, will override which device is selected.
+    /// This overrides --loopback for picking devices, but not picking sample formats.
+    #[structopt(short, long)]
+    device_index: Option<usize>,
 
     /// How much to amplify the incoming signal
     /// before sending it to the spectrum viewer.
@@ -139,6 +144,14 @@ impl AtomicSpectrum {
     }
 }
 
+fn vec_take<T>(mut vec: Vec<T>, index: usize) -> Option<T> {
+    if index < vec.len() {
+        Some(vec.swap_remove(index))
+    } else {
+        None
+    }
+}
+
 fn main() -> Result<()> {
     let mut opt = Opt::from_args();
     opt.parse_validate()?;
@@ -153,9 +166,10 @@ fn main() -> Result<()> {
         .collect();
 
     println!("Devices:");
-    for dev in &devices {
+    for (i, dev) in devices.iter().enumerate() {
         println!(
-            "- {}",
+            "{}. {}",
+            i,
             match &dev.name() {
                 Ok(s) => s.as_ref(),
                 Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
@@ -167,15 +181,20 @@ fn main() -> Result<()> {
     println!("");
 
     // TODO add checkbox for toggling between input and loopback capture
-    let device = if opt.loopback {
-        host.default_output_device()
+    let device = if let Some(device_index) = opt.device_index {
+        vec_take(devices, device_index)
+            .with_context(|| format!("Invalid --device-index {}", device_index))?
     } else {
-        host.default_input_device()
-    }
-    .expect("no input device available");
+        if opt.loopback {
+            host.default_output_device()
+        } else {
+            host.default_input_device()
+        }
+        .context("no input device available")?
+    };
 
     println!(
-        "Default input device: {}",
+        "Input device: {}",
         match &device.name() {
             Ok(s) => s.as_ref(),
             Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
@@ -200,6 +219,9 @@ fn main() -> Result<()> {
     }
     println!("");
 
+    // TODO pick native sampling rate.
+    // ALSA Pipewire has a max_sample_rate of 384000,
+    // even if device doesn't run at that rate.
     let supported_config: cpal::SupportedStreamConfig = supported_configs_range
         .into_iter()
         .next()
@@ -212,11 +234,16 @@ fn main() -> Result<()> {
     );
 
     let err_fn = |err| eprintln!("an error occurred on the input audio stream: {}", err);
+
+    // For some reason, converting SupportedStreamConfig into StreamConfig
+    // (SupportedStreamConfig::config())
+    // throws away buffer_size and replaces with BufferSize::Default.
     let config: cpal::StreamConfig = supported_config.into();
 
     // cpal::BufferSize::Fixed(FrameCount) is not supported on WASAPI:
     // https://github.com/RustAudio/cpal/blob/b78ff83c03a0d0b40d51dc24f49369205f022b0a/src/host/wasapi/device.rs#L650-L658
     println!("Picked buffer size: {:?}", config.buffer_size);
+    println!("Picked sample rate: {}", config.sample_rate.0);
 
     let mut fft_vec_buffer = FftBuffer::new(FftConfig {
         volume: opt.volume,
