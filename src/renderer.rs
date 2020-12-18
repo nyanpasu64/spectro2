@@ -291,10 +291,7 @@ impl State {
         if PHASE_DERIVATIVE {
             for (out, curr, prev) in izip!(&mut self.fft_vec, &frame.spectrum, &frame.prev_spectrum)
             {
-                *out = PodComplex(FftSample::from_polar(
-                    &curr.norm(),
-                    &(curr.arg() - prev.arg()),
-                ))
+                *out = PodComplex(FftSample::from_polar(curr.norm(), curr.arg() - prev.arg()))
             }
         } else {
             self.fft_vec.copy_from_slice(fft_as_pod(&frame.spectrum));

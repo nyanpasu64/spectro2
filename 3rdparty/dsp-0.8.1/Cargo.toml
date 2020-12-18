@@ -30,13 +30,13 @@ version = "0.4"
 default-features = false
 
 [dependencies.itertools]
-version = "0.8"
+version = "0.9"
 
 [dependencies.num-complex]
-version = "0.2"
+version = "0.3"
 
 [dependencies.rustfft]
-version = "3"
+version = "4"
 [dev-dependencies.assert_approx_eq]
 version = "1.1.0"
 

@@ -8,10 +8,10 @@ edition = "2018"
 
 [dependencies]
 cpal = "0.13.1"
-rustfft = "3.0.1"
+rustfft = "4.0.0"
 dsp = { path = "3rdparty/dsp-0.8.1", version = "0.8.1" }
-realfft = "0.2.1"
-shaderc = "0.6.2"
+realfft = "0.3.0"
+shaderc = "0.7.0"
 wgpu = "0.6.0"
 futures = "0.3.5"
 bytemuck = "1.4.1"
