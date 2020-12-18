@@ -11,7 +11,6 @@ cpal = "0.13.1"
 rustfft = "3.0.1"
 dsp = { path = "3rdparty/dsp-0.8.1", version = "0.8.1" }
 realfft = "0.2.1"
-# Version 0.22.2 crashes when combining with cpal. master doesn't.
 shaderc = "0.6.2"
 wgpu = "0.6.0"
 futures = "0.3.5"
@@ -22,7 +21,6 @@ structopt = { version = "0.3.17", default-features = false }
 itertools = "0.9.0"
 
 [dependencies.winit]
-git = "https://github.com/rust-windowing/winit.git"
-rev = "47e7aa4"
+version = "0.24.0"
 default-features = false
 features = ["x11"]  # wayland feature results in 33 more dependencies
