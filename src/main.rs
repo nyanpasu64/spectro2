@@ -94,6 +94,15 @@ pub struct Opt {
     #[structopt(short, long, default_value = "512", parse(try_from_str = parse_redraw_size))]
     redraw_size: usize,
 
+    /// Limit the FPS of the rendering thread.
+    /// If set to 0, FPS is unbounded and this program will max out the CPU and/or GPU.
+    ///
+    /// This program does not support vsync,
+    /// because wgpu implements it strangely, adding around 3 frames of latency.
+    /// And polling the device before/after submitting each frame doesn't help.
+    #[structopt(long, default_value = "200")]
+    fps: u32,
+
     /// If passed, prints a peak meter to the terminal,
     /// which may have lower latency to incoming audio than the spectrum viewer.
     /// This will generate a lot of terminal output.
@@ -348,11 +357,19 @@ fn main() -> Result<()> {
     println!("GPU backend: {:?}", state.adapter_info().backend);
 
     // State used to track and limit FPS.
-    let mut loop_helper = LoopHelper::builder()
-        .report_interval_s(1.0)
-        .build_with_target_rate(250.0);
+    let mut loop_helper = {
+        let builder = LoopHelper::builder().report_interval_s(1.0);
+
+        let fps_limit = opt.fps;
+        if fps_limit > 0 {
+            builder.build_with_target_rate(fps_limit)
+        } else {
+            builder.build_without_target_rate()
+        }
+    };
 
     let print_fps = opt.print_fps;
+
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             ref event,
@@ -410,6 +427,14 @@ fn main() -> Result<()> {
                     println!("FPS: {}", fps);
                 }
             }
+
+            // Limit FPS.
+            // Because renderer.rs uses PresentMode::Immediate,
+            // it will render frames as fast as the CPU and GPU will allow.
+            // So sleep the graphics thread to limit FPS.
+            // (If loop_helper is constructed via build_without_target_rate(),
+            // this is a no-op.)
+            loop_helper.loop_sleep();
         }
         _ => {}
     });
