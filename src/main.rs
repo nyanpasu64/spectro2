@@ -367,7 +367,10 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Event::RedrawRequested(_) => {
+        Event::MainEventsCleared => {
+            // apparently it's unnecessary to request_redraw() and RedrawRequested
+            // when drawing on every frame, idk?
+
             // might as well take the "yolo" approach,
             // and just ignore the possibility of occasional single-frame desyncs
             // and stale/missing updates.
@@ -385,11 +388,6 @@ fn main() -> Result<()> {
                 state.update(received_fft);
             }
             state.render();
-        }
-        Event::MainEventsCleared => {
-            // RedrawRequested will only trigger once, unless we manually
-            // request it.
-            window.request_redraw();
         }
         _ => {}
     });
