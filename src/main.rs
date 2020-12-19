@@ -92,6 +92,12 @@ pub struct Opt {
     /// Otherwise must be a factor of --fft-size.
     #[structopt(short, long, default_value = "512", parse(try_from_str = parse_redraw_size))]
     redraw_size: usize,
+
+    /// If passed, prints a peak meter to the terminal,
+    /// which may have lower latency to incoming audio than the spectrum viewer.
+    /// This will generate a lot of terminal output.
+    #[structopt(short, long)]
+    terminal_print: bool,
 }
 
 impl Opt {
@@ -281,21 +287,24 @@ fn main() -> Result<()> {
             atomic_fft.available.store(true, Ordering::Release);
         };
 
+        let print_to_terminal = opt.terminal_print;
         device
             .build_input_stream(
                 &config,
                 move |data, _| {
-                    let peak = data
-                        .iter()
-                        .map(|&x| (x as isize).abs() as usize)
-                        .fold(0, |x, y| x.max(y));
-                    let nchar = peak * 100 / 32768;
+                    if print_to_terminal {
+                        let peak = data
+                            .iter()
+                            .map(|&x| (x as isize).abs() as usize)
+                            .fold(0, |x, y| x.max(y));
+                        let nchar = peak * 100 / 32768;
 
-                    let stdout = io::stdout();
-                    let mut handle = stdout.lock();
+                        let stdout = io::stdout();
+                        let mut handle = stdout.lock();
 
-                    handle.write_all(&b"X".repeat(nchar)).unwrap();
-                    handle.write_all(b"\n").unwrap();
+                        handle.write_all(&b"X".repeat(nchar)).unwrap();
+                        handle.write_all(b"\n").unwrap();
+                    }
 
                     fft_vec_buffer.push(data, &mut spectrum_callback);
                 },
