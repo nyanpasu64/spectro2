@@ -348,7 +348,6 @@ fn main() -> Result<()> {
             window_id,
         } if window_id == window.id() => {
             if !state.input(event) {
-                // UPDATED!
                 match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     WindowEvent::KeyboardInput { input, .. } => match input {
