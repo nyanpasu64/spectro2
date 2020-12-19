@@ -400,19 +400,6 @@ fn main() -> Result<()> {
             // apparently it's unnecessary to request_redraw() and RedrawRequested
             // when drawing on every frame, idk?
 
-            // Limit FPS.
-            //
-            // spin_sleep recommends placing this at the end of the loop.
-            // But if I do that, the actual FPS is lower than the requested FPS.
-            // This is because LoopHelper pads the duration between loop_start() and loop_sleep(),
-            // but ignores the time spent between loop_sleep() and the subsequent loop_start(),
-            // spent in winit's event loop.
-            // This gets much closer to the proper frame rate.
-            //
-            // (If loop_helper is constructed via build_without_target_rate(),
-            // this is a no-op.)
-            loop_helper.loop_sleep();
-
             // Track FPS.
             loop_helper.loop_start();
 
@@ -440,6 +427,14 @@ fn main() -> Result<()> {
                     println!("FPS: {}", fps);
                 }
             }
+
+            // Limit FPS.
+            // Because renderer.rs uses PresentMode::Immediate,
+            // it will render frames as fast as the CPU and GPU will allow.
+            // So sleep the graphics thread to limit FPS.
+            // (If loop_helper is constructed via build_without_target_rate(),
+            // this is a no-op.)
+            loop_helper.loop_sleep();
         }
         _ => {}
     });
