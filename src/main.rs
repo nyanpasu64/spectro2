@@ -9,6 +9,7 @@ use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
 use rustfft::num_traits::Zero;
+use spin_sleep::LoopHelper;
 use std::io::{self, Write};
 use std::{cmp::min, sync::atomic::AtomicBool, sync::Arc};
 use winit::{
@@ -98,6 +99,10 @@ pub struct Opt {
     /// This will generate a lot of terminal output.
     #[structopt(short, long)]
     terminal_print: bool,
+
+    /// If passed, prints FPS to the terminal.
+    #[structopt(long)]
+    print_fps: bool,
 }
 
 impl Opt {
@@ -342,6 +347,12 @@ fn main() -> Result<()> {
 
     println!("GPU backend: {:?}", state.adapter_info().backend);
 
+    // State used to track and limit FPS.
+    let mut loop_helper = LoopHelper::builder()
+        .report_interval_s(1.0)
+        .build_with_target_rate(250.0);
+
+    let print_fps = opt.print_fps;
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             ref event,
@@ -372,6 +383,9 @@ fn main() -> Result<()> {
             // apparently it's unnecessary to request_redraw() and RedrawRequested
             // when drawing on every frame, idk?
 
+            // Track FPS.
+            loop_helper.loop_start();
+
             // might as well take the "yolo" approach,
             // and just ignore the possibility of occasional single-frame desyncs
             // and stale/missing updates.
@@ -389,6 +403,13 @@ fn main() -> Result<()> {
                 state.update(received_fft);
             }
             state.render();
+
+            // Print FPS.
+            if print_fps {
+                if let Some(fps) = loop_helper.report_rate() {
+                    println!("FPS: {}", fps);
+                }
+            }
         }
         _ => {}
     });
