@@ -9,6 +9,7 @@ use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
 use rustfft::num_traits::Zero;
+use std::io::{self, Write};
 use std::{cmp::min, sync::atomic::AtomicBool, sync::Arc};
 use winit::{
     dpi::PhysicalSize,
@@ -283,7 +284,21 @@ fn main() -> Result<()> {
         device
             .build_input_stream(
                 &config,
-                move |data, _| fft_vec_buffer.push(data, &mut spectrum_callback),
+                move |data, _| {
+                    let peak = data
+                        .iter()
+                        .map(|&x| (x as isize).abs() as usize)
+                        .fold(0, |x, y| x.max(y));
+                    let nchar = peak * 100 / 32768;
+
+                    let stdout = io::stdout();
+                    let mut handle = stdout.lock();
+
+                    handle.write_all(&b"X".repeat(nchar)).unwrap();
+                    handle.write_all(b"\n").unwrap();
+
+                    fft_vec_buffer.push(data, &mut spectrum_callback);
+                },
                 err_fn,
             )
             .unwrap()
