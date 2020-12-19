@@ -340,6 +340,8 @@ fn main() -> Result<()> {
         .context("Failed to initialize renderer")?;
     let mut received_fft = Some(new_frame());
 
+    println!("GPU backend: {:?}", state.adapter_info().backend);
+
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             ref event,
