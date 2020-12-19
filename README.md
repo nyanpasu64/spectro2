@@ -48,6 +48,10 @@ OPTIONS:
             How much to amplify the incoming signal before sending it to the spectrum viewer [default: 20]
 ```
 
+## Documentation
+
+There are (internal, disorganized) design documents (planning and notes) at https://drive.google.com/drive/folders/1Jzo9SQ8yuVD9YK7dTZaC7mlJmPSnHnZy?usp=sharing.
+
 ## Credits
 
 This program would not be possible without the assistance of:
