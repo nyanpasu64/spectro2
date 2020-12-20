@@ -123,15 +123,17 @@ impl LoopHelper {
     /// [`build_with_target_rate`](struct.LoopHelperBuilder.html#method.build_with_target_rate))
     /// has elapsed. Uses a [`SpinSleeper`](struct.SpinSleeper.html) to sleep the thread to provide
     /// improved accuracy. If the delta has already elapsed this method returns immediately.
-    pub fn loop_sleep(&mut self) {
+    pub fn loop_sleep(&mut self) -> Duration {
         let elapsed = self.last_loop_end.elapsed();
-        if elapsed < self.target_delta {
+        let delta = if elapsed < self.target_delta {
             self.sleeper.sleep(self.target_delta - elapsed);
-            self.last_loop_end += self.target_delta;
+            self.target_delta
         } else {
-            self.last_loop_end += elapsed;
-        }
+            elapsed
+        };
+        self.last_loop_end += delta;
         self.delta_count += 1;
+        delta
     }
 
     /// Generally called at the end of a loop to sleep until the desired delta (configured with
@@ -139,15 +141,17 @@ impl LoopHelper {
     /// has elapsed. Does *not* use a  [`SpinSleeper`](struct.SpinSleeper.html), instead directly
     /// calls `thread::sleep` and will never spin. This is less accurate than
     /// [`loop_sleep`](struct.LoopHelper.html#method.loop_sleep) but less CPU intensive.
-    pub fn loop_sleep_no_spin(&mut self) {
+    pub fn loop_sleep_no_spin(&mut self) -> Duration {
         let elapsed = self.last_loop_end.elapsed();
-        if elapsed < self.target_delta {
+        let delta = if elapsed < self.target_delta {
             thread_sleep(self.target_delta - elapsed);
-            self.last_loop_end += self.target_delta;
+            self.target_delta
         } else {
-            self.last_loop_end += elapsed;
-        }
+            elapsed
+        };
+        self.last_loop_end += delta;
         self.delta_count += 1;
+        delta
     }
 
     /// Returns the mean rate per second recorded since the last report. Returns `None` if
