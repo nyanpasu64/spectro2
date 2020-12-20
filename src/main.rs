@@ -62,9 +62,10 @@ fn parse_redraw_size(src: &str) -> Result<usize> {
 #[structopt(name = "spectro2")]
 pub struct Opt {
     /// If passed, will listen to speaker instead of microphone.
-    /// Note that this causes substantial latency (around 180ms),
-    /// and you may wish to route speakers through VB-Audio Virtual Cable
-    /// so both speakers and the visualization are delayed by the same amount.
+    /// Note that this has a small amount of latency.
+    /// You can route speakers through VB-Audio Virtual Cable.
+    /// This will delay audio by more than the video latency,
+    /// but you may prefer it to not using it.
     #[structopt(short, long)]
     loopback: bool,
 
