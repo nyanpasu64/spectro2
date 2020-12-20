@@ -43,10 +43,8 @@ pub struct LoopHelper {
     report_interval: Duration,
     sleeper: SpinSleeper,
 
-    last_loop_start: Option<Instant>,
     last_loop_end: Instant,
     last_report: Instant,
-    delta_sum: Duration,
     delta_count: u32,
 }
 
@@ -105,9 +103,7 @@ impl LoopHelperBuilder {
             report_interval: interval,
             sleeper: self.sleeper.unwrap_or_else(SpinSleeper::default),
             last_report: now,
-            last_loop_start: None,
             last_loop_end: now,
-            delta_sum: Duration::from_secs(0),
             delta_count: 0,
         }
     }
@@ -123,30 +119,6 @@ impl LoopHelper {
         }
     }
 
-    /// Notifies the helper that a new loop has begun.
-    /// Returns the delta, the duration since the last call to `loop_start` or `loop_start_s`.
-    pub fn loop_start(&mut self) -> Duration {
-        let it_start = Instant::now();
-
-        let delta;
-        if let Some(last_loop_start) = self.last_loop_start {
-            delta = it_start.duration_since(last_loop_start);
-            self.delta_sum += delta;
-            self.delta_count += 1;
-        } else {
-            delta = Duration::from_secs(0);
-        }
-
-        self.last_loop_start = Some(it_start);
-        delta
-    }
-
-    /// Notifies the helper that a new loop has begun.
-    /// Returns the delta, the seconds since the last call to `loop_start` or `loop_start_s`.
-    pub fn loop_start_s(&mut self) -> Seconds {
-        self.loop_start().as_secs_f64()
-    }
-
     /// Generally called at the end of a loop to sleep until the desired delta (configured with
     /// [`build_with_target_rate`](struct.LoopHelperBuilder.html#method.build_with_target_rate))
     /// has elapsed. Uses a [`SpinSleeper`](struct.SpinSleeper.html) to sleep the thread to provide
@@ -157,8 +129,9 @@ impl LoopHelper {
             self.sleeper.sleep(self.target_delta - elapsed);
             self.last_loop_end += self.target_delta;
         } else {
-            self.last_loop_end = Instant::now();
+            self.last_loop_end += elapsed;
         }
+        self.delta_count += 1;
     }
 
     /// Generally called at the end of a loop to sleep until the desired delta (configured with
@@ -172,17 +145,18 @@ impl LoopHelper {
             thread_sleep(self.target_delta - elapsed);
             self.last_loop_end += self.target_delta;
         } else {
-            self.last_loop_end = Instant::now();
+            self.last_loop_end += elapsed;
         }
+        self.delta_count += 1;
     }
 
     /// Returns the mean rate per second recorded since the last report. Returns `None` if
     /// the last report was within the configured `report_interval`.
     pub fn report_rate(&mut self) -> Option<RatePerSecond> {
-        let now = Instant::now();
-        if now.duration_since(self.last_report) > self.report_interval && self.delta_count > 0 {
-            let report = Some(f64::from(self.delta_count) / self.delta_sum.as_secs_f64());
-            self.delta_sum = Duration::from_secs(0);
+        let now = self.last_loop_end;
+        let time_since_report = now.duration_since(self.last_report);
+        if time_since_report > self.report_interval && self.delta_count > 0 {
+            let report = Some(f64::from(self.delta_count) / time_since_report.as_secs_f64());
             self.delta_count = 0;
             self.last_report = now;
             report

@@ -400,9 +400,6 @@ fn main() -> Result<()> {
             // apparently it's unnecessary to request_redraw() and RedrawRequested
             // when drawing on every frame, idk?
 
-            // Track FPS.
-            loop_helper.loop_start();
-
             // might as well take the "yolo" approach,
             // and just ignore the possibility of occasional single-frame desyncs
             // and stale/missing updates.
