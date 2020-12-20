@@ -1,17 +1,19 @@
 // DFT/FFT math formulas have uppercase variables.
 #![allow(non_snake_case)]
+mod common;
 mod fft;
 mod renderer;
+mod sync;
 
 use anyhow::{Context, Error, Result};
-use atomicbox::AtomicBox;
+use common::{SpectrumFrame, SpectrumFrameRef};
 use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
-use rustfft::num_traits::Zero;
 use spin_sleep::LoopHelper;
 use std::io::{self, Write};
-use std::{cmp::min, sync::atomic::AtomicBool, sync::Arc};
+use std::{cmp::min, sync::Arc};
+use sync::AtomicSpectrum;
 use winit::{
     dpi::PhysicalSize,
     event::*,
@@ -129,40 +131,6 @@ impl Opt {
         }
 
         Ok(())
-    }
-}
-
-/// The data to be rendered in one frame.
-pub struct SpectrumFrame {
-    spectrum: FftVec,
-    prev_spectrum: FftVec,
-}
-
-impl SpectrumFrame {
-    fn new(spectrum_size: usize) -> SpectrumFrame {
-        SpectrumFrame {
-            spectrum: vec![FftSample::zero(); spectrum_size],
-            prev_spectrum: vec![FftSample::zero(); spectrum_size],
-        }
-    }
-}
-
-pub struct SpectrumFrameRef<'a> {
-    spectrum: &'a FftSlice,
-    prev_spectrum: &'a FftSlice,
-}
-
-struct AtomicSpectrum {
-    data: AtomicBox<SpectrumFrame>,
-    available: AtomicBool,
-}
-
-impl AtomicSpectrum {
-    fn new(spectrum_size: usize) -> AtomicSpectrum {
-        AtomicSpectrum {
-            data: AtomicBox::new(Box::new(SpectrumFrame::new(spectrum_size))),
-            available: false.into(),
-        }
     }
 }
 

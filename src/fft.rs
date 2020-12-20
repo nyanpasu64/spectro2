@@ -1,14 +1,7 @@
-use crate::SpectrumFrameRef;
+use crate::common::{FftSample, FftVec, RealVec, SpectrumFrameRef};
 use cpal::ChannelCount;
 use dsp::window::Window;
-use rustfft::num_complex::Complex;
 use rustfft::num_traits::Zero;
-
-pub type RealVec = Vec<f32>;
-
-pub type FftSample = Complex<f32>;
-pub type FftVec = Vec<FftSample>;
-pub type FftSlice = [FftSample];
 
 pub type FftCallback<'a> = &'a mut dyn FnMut(SpectrumFrameRef);
 
