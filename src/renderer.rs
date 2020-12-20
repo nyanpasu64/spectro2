@@ -1,4 +1,5 @@
-use crate::{fft::*, Opt, SpectrumFrame};
+use crate::common::{FftSample, FftSlice, SpectrumFrame};
+use crate::Opt;
 use anyhow::{Context, Result};
 use itertools::izip;
 use rustfft::num_traits::Zero;
