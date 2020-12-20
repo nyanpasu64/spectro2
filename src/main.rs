@@ -6,14 +6,13 @@ mod renderer;
 mod sync;
 
 use anyhow::{Context, Error, Result};
-use common::{SpectrumFrame, SpectrumFrameRef};
-use core::sync::atomic::Ordering;
+use common::SpectrumFrameRef;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
 use spin_sleep::LoopHelper;
+use std::cmp::min;
 use std::io::{self, Write};
-use std::{cmp::min, sync::Arc};
-use sync::AtomicSpectrum;
+use sync::new_spectrum_cell;
 use winit::{
     dpi::PhysicalSize,
     event::*,
@@ -242,31 +241,20 @@ fn main() -> Result<()> {
         window_type: WindowType::Hann,
     });
     let spectrum_size = fft_vec_buffer.spectrum_size();
-    let new_frame = || Box::new(SpectrumFrame::new(spectrum_size));
 
-    let atomic_fft = Arc::new(AtomicSpectrum::new(spectrum_size));
+    let (mut writer, mut reader) = new_spectrum_cell(spectrum_size);
 
     let stream = {
-        let mut scratch_fft = Some(new_frame());
-        let atomic_fft = atomic_fft.clone();
         let mut spectrum_callback = move |frame: SpectrumFrameRef| {
             {
-                let scratch_fft = scratch_fft.as_deref_mut().unwrap();
+                let scratch_fft = writer.get_mut();
                 scratch_fft.spectrum.copy_from_slice(frame.spectrum);
                 scratch_fft
                     .prev_spectrum
                     .copy_from_slice(frame.prev_spectrum);
             }
 
-            scratch_fft = Some(
-                atomic_fft
-                    .data
-                    .swap(scratch_fft.take().unwrap(), Ordering::AcqRel),
-            );
-            // If atomic_fft.data gets read and swapped before we write true,
-            // the next swap will receive stale data.
-            // This is possible but rare and probably doesn't matter.
-            atomic_fft.available.store(true, Ordering::Release);
+            writer.publish();
         };
 
         let print_to_terminal = opt.terminal_print;
@@ -320,7 +308,6 @@ fn main() -> Result<()> {
     // Since main can't be async, we're going to need to block
     let mut state = block_on(renderer::State::new(&window, &opt, config.sample_rate.0))
         .context("Failed to initialize renderer")?;
-    let mut received_fft = Some(new_frame());
 
     println!("GPU backend: {:?}", state.adapter_info().backend);
 
@@ -368,20 +355,9 @@ fn main() -> Result<()> {
             // apparently it's unnecessary to request_redraw() and RedrawRequested
             // when drawing on every frame, idk?
 
-            // might as well take the "yolo" approach,
-            // and just ignore the possibility of occasional single-frame desyncs
-            // and stale/missing updates.
-            // this code needs to be rewritten once I add multi-frame history.
-            if atomic_fft.available.swap(false, Ordering::Acquire) {
-                received_fft = Some(
-                    atomic_fft
-                        .data
-                        .swap(received_fft.take().unwrap(), Ordering::AcqRel),
-                );
-            }
-
+            reader.fetch();
             {
-                let received_fft = received_fft.as_deref().unwrap();
+                let received_fft = reader.get();
                 state.update(received_fft);
             }
             state.render();
