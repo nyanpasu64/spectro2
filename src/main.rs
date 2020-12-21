@@ -9,6 +9,8 @@ use core::sync::atomic::Ordering;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
 use rustfft::num_traits::Zero;
+use spin_sleep::LoopHelper;
+use std::io::{self, Write};
 use std::{cmp::min, sync::atomic::AtomicBool, sync::Arc};
 use winit::{
     dpi::PhysicalSize,
@@ -60,9 +62,10 @@ fn parse_redraw_size(src: &str) -> Result<usize> {
 #[structopt(name = "spectro2")]
 pub struct Opt {
     /// If passed, will listen to speaker instead of microphone.
-    /// Note that this causes substantial latency (around 180ms),
-    /// and you may wish to route speakers through VB-Audio Virtual Cable
-    /// so both speakers and the visualization are delayed by the same amount.
+    /// Note that this has a small amount of latency.
+    /// You can route speakers through VB-Audio Virtual Cable.
+    /// This will delay audio by more than the video latency,
+    /// but you may prefer it to not using it.
     #[structopt(short, long)]
     loopback: bool,
 
@@ -91,6 +94,25 @@ pub struct Opt {
     /// Otherwise must be a factor of --fft-size.
     #[structopt(short, long, default_value = "512", parse(try_from_str = parse_redraw_size))]
     redraw_size: usize,
+
+    /// Limit the FPS of the rendering thread.
+    /// If set to 0, FPS is unbounded and this program will max out the CPU and/or GPU.
+    ///
+    /// This program does not support vsync,
+    /// because wgpu implements it strangely, adding around 3 frames of latency.
+    /// And polling the device before/after submitting each frame doesn't help.
+    #[structopt(long, default_value = "200")]
+    fps: u32,
+
+    /// If passed, prints a peak meter to the terminal,
+    /// which may have lower latency to incoming audio than the spectrum viewer.
+    /// This will generate a lot of terminal output.
+    #[structopt(short, long)]
+    terminal_print: bool,
+
+    /// If passed, prints FPS to the terminal.
+    #[structopt(long)]
+    print_fps: bool,
 }
 
 impl Opt {
@@ -280,10 +302,27 @@ fn main() -> Result<()> {
             atomic_fft.available.store(true, Ordering::Release);
         };
 
+        let print_to_terminal = opt.terminal_print;
         device
             .build_input_stream(
                 &config,
-                move |data, _| fft_vec_buffer.push(data, &mut spectrum_callback),
+                move |data, _| {
+                    if print_to_terminal {
+                        let peak = data
+                            .iter()
+                            .map(|&x| (x as isize).abs() as usize)
+                            .fold(0, |x, y| x.max(y));
+                        let nchar = peak * 100 / 32768;
+
+                        let stdout = io::stdout();
+                        let mut handle = stdout.lock();
+
+                        handle.write_all(&b"X".repeat(nchar)).unwrap();
+                        handle.write_all(b"\n").unwrap();
+                    }
+
+                    fft_vec_buffer.push(data, &mut spectrum_callback);
+                },
                 err_fn,
             )
             .unwrap()
@@ -316,13 +355,28 @@ fn main() -> Result<()> {
         .context("Failed to initialize renderer")?;
     let mut received_fft = Some(new_frame());
 
+    println!("GPU backend: {:?}", state.adapter_info().backend);
+
+    // State used to track and limit FPS.
+    let mut loop_helper = {
+        let builder = LoopHelper::builder().report_interval_s(1.0);
+
+        let fps_limit = opt.fps;
+        if fps_limit > 0 {
+            builder.build_with_target_rate(fps_limit)
+        } else {
+            builder.build_without_target_rate()
+        }
+    };
+
+    let print_fps = opt.print_fps;
+
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
             ref event,
             window_id,
         } if window_id == window.id() => {
             if !state.input(event) {
-                // UPDATED!
                 match event {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     WindowEvent::KeyboardInput { input, .. } => match input {
@@ -343,7 +397,10 @@ fn main() -> Result<()> {
                 }
             }
         }
-        Event::RedrawRequested(_) => {
+        Event::MainEventsCleared => {
+            // apparently it's unnecessary to request_redraw() and RedrawRequested
+            // when drawing on every frame, idk?
+
             // might as well take the "yolo" approach,
             // and just ignore the possibility of occasional single-frame desyncs
             // and stale/missing updates.
@@ -361,11 +418,21 @@ fn main() -> Result<()> {
                 state.update(received_fft);
             }
             state.render();
-        }
-        Event::MainEventsCleared => {
-            // RedrawRequested will only trigger once, unless we manually
-            // request it.
-            window.request_redraw();
+
+            // Print FPS.
+            if print_fps {
+                if let Some(fps) = loop_helper.report_rate() {
+                    println!("FPS: {}", fps);
+                }
+            }
+
+            // Limit FPS.
+            // Because renderer.rs uses PresentMode::Immediate,
+            // it will render frames as fast as the CPU and GPU will allow.
+            // So sleep the graphics thread to limit FPS.
+            // (If loop_helper is constructed via build_without_target_rate(),
+            // this is a no-op.)
+            loop_helper.loop_sleep();
         }
         _ => {}
     });

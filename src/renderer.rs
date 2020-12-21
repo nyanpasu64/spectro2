@@ -54,6 +54,7 @@ fn fft_out_size(fft_input_size: usize) -> usize {
 // - https://github.com/sotrh/learn-wgpu/blob/3a46a215/code/beginner/tutorial2-swapchain/src/main.rs
 
 pub struct State {
+    adapter_info: wgpu::AdapterInfo,
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -94,6 +95,8 @@ impl State {
             .await
             .context("Failed to create adapter")?;
 
+        let adapter_info = adapter.get_info();
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -111,7 +114,7 @@ impl State {
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo, // TODO change to Mailbox?
+            present_mode: wgpu::PresentMode::Immediate,
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
@@ -246,6 +249,7 @@ impl State {
         });
 
         Ok(State {
+            adapter_info,
             surface,
             device,
             queue,
@@ -259,6 +263,10 @@ impl State {
             fft_vec_buffer,
             bind_group,
         })
+    }
+
+    pub fn adapter_info(&self) -> &wgpu::AdapterInfo {
+        &self.adapter_info
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
