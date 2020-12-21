@@ -14,39 +14,58 @@ Note that this project has custom flags for debug and release builds. Dependenci
 
 If you type `cargo run [...] --`, all arguments after the double-hyphen are passed to `spectro2` instead of `cargo run`.
 
-Example usage: `cargo run -- --loopback`
+Example usage: `cargo run -- --loopback --volume 100`
 
-Full docs: `cargo run -- --help`
+**SEIZURE WARNING:** Rapidly changing audio can cause flashing lights, especially once colored stereo is added.
+
+Full docs: `cargo run -- --help` (`-h` will only print short help).
 
 ```
 USAGE:
     spectro2.exe [FLAGS] [OPTIONS]
 
-FLAGS:
-    -h, --help
-            Prints help information
-
-    -l, --loopback
-            If passed, will listen to speaker instead of microphone. Note that this causes substantial latency (around
-            180ms), and you may wish to route speakers through VB-Audio Virtual Cable so both speakers and the
-            visualization are delayed by the same amount
-    -V, --version
-            Prints version information
-
-
 OPTIONS:
+    -l, --loopback
+            If passed, will listen to output device (speaker) instead of input (microphone)
+
+    -d, --device-index <device-index>
+            If passed, will override which device is selected.
+
+            This overrides --loopback for picking devices. However, you still need to pass --loopback if you pass an
+            output device (speaker) to --device-index.
+    -v, --volume <volume>
+            How much to amplify the incoming signal before sending it to the spectrum viewer [default: 20]
+
     -f, --fft-size <fft-size>
-            Number of samples to use in each FFT block. Increasing this value makes it easier to identify pitches, but
-            increases audio latency and smearing in time. Must be a multiple of --redraw-size [default: 2048]
+            Number of samples to use in each FFT block.
+
+            Increasing this value makes it easier to identify pitches, but increases audio latency and smearing in time.
+            Must be a multiple of --redraw-size. [default: 2048]
     -r, --redraw-size <redraw-size>
-            Number of samples to advance time before recalculating FFT. Decreasing this value causes FFTs to be computed
-            more often, increasing CPU usage but reducing latency and stuttering.
+            Number of samples to advance time before recalculating FFT.
+
+            Decreasing this value causes FFTs to be computed more often, increasing CPU usage but reducing latency and
+            stuttering.
 
             If this value exceeds --fft-size, it is clamped to it. Otherwise must be a factor of --fft-size. [default:
             512]
-    -v, --volume <volume>
-            How much to amplify the incoming signal before sending it to the spectrum viewer [default: 20]
+        --fps <fps>
+            Limit the FPS of the rendering thread.
+
+            If set to 0, FPS is unbounded and this program will max out the CPU and/or GPU.
+
+            This program does not support vsync because it adds around 3 frames of latency. [default: 200]
+        --print-fps
+            If passed, prints FPS to the terminal
+
+    -h, --help
+            Prints help information
+
+    -V, --version
+            Prints version information
 ```
+
+Note that loopback mode has somewhat higher latency than microphone input, to the point it can distract from listening to music. I'm not familiar with latency compensation, and if anyone has suggestions, feel free to let me know. My best attempt so far is to route your music player through VB-Audio Virtual Cable's input, use `--device-index` to visualize it, and configure Windows to listen to the output. This will delay audio by more than the video latency, which may be worse than not using it.
 
 ## Documentation
 
