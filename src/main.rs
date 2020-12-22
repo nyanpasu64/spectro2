@@ -111,6 +111,12 @@ pub struct Opt {
     #[structopt(short, long)]
     terminal_print: bool,
 
+    /// If passed, always renders new frames, even if the spectrum is unchanged.
+    /// (A new spectrum is computed every --redraw-size samples.)
+    /// Increases GPU usage and has no real benefit.
+    #[structopt(long)]
+    render_unchanged: bool,
+
     /// If passed, prints FPS to the terminal.
     #[structopt(long)]
     print_fps: bool,
@@ -325,6 +331,7 @@ fn main() -> Result<()> {
     };
 
     let print_fps = opt.print_fps;
+    let render_unchanged = opt.render_unchanged;
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -356,12 +363,12 @@ fn main() -> Result<()> {
             // apparently it's unnecessary to request_redraw() and RedrawRequested
             // when drawing on every frame, idk?
 
-            reader.fetch();
-            {
+            let changed = reader.fetch();
+            if changed || render_unchanged {
                 let received_fft = reader.get();
                 state.update(received_fft);
+                state.render();
             }
-            state.render();
 
             // Print FPS.
             if print_fps {
