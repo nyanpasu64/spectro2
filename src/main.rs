@@ -24,6 +24,8 @@ use winit::{
 const MIN_FFT_SIZE: usize = 4;
 const MAX_FFT_SIZE: usize = 16384;
 
+const APP_NAME: &'static str = env!("CARGO_PKG_NAME");
+
 use structopt::StructOpt;
 
 fn parse_fft_size(src: &str) -> Result<usize> {
@@ -62,7 +64,7 @@ fn parse_redraw_size(src: &str) -> Result<usize> {
 /// Real-time phase-magnitude spectrum viewer
 #[derive(StructOpt, Debug)]
 #[structopt(
-    name = "spectro2",
+    name = APP_NAME,
     global_settings(&[AppSettings::DeriveDisplayOrder, AppSettings::UnifiedHelpMessage]),
 )]
 pub struct Opt {
@@ -301,10 +303,12 @@ fn main() -> Result<()> {
 
     let event_loop = EventLoop::new();
     let window = {
-        let window_builder = WindowBuilder::new().with_inner_size(PhysicalSize {
-            width: 1024,
-            height: 768,
-        });
+        let window_builder = WindowBuilder::new()
+            .with_inner_size(PhysicalSize {
+                width: 1024,
+                height: 768,
+            })
+            .with_title(APP_NAME);
         #[cfg(target_os = "windows")]
         let window_builder = {
             // Work around cpal/winit crash.
