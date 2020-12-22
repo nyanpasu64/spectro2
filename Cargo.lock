@@ -77,12 +77,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atomig"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5802d4a527d4a66fc176d963f7587a9637dec22d3bf0e1ed2f6fb4707b7c383a"
-
-[[package]]
 name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1826,7 +1820,6 @@ name = "spectro2"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "atomig",
  "bytemuck",
  "cpal",
  "dsp",
