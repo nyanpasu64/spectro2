@@ -30,7 +30,7 @@ const bool RESCALE = true;
 const float CENTER_ANGLE = 0;
 const bool HIDE_SIDES = false;  // Hide side of window (where signal is out of phase).
 
-const vec2 OFFSET = vec2(0.75, 0);
+const vec2 OFFSET = vec2(0, 0);
 
 float unipolar(float bipolar) {
     return (bipolar + 1) / 2;
@@ -66,9 +66,9 @@ float sqrt_scale_k(float px_radius) {
     // unit: half-cycle
     const float FREQ_FLOOR = 20. / NYQUIST_HZ;
     // unit: half-cycle
-    const float FREQ_REL = 6000. / NYQUIST_HZ;
+    const float FREQ_REL = 10000. / NYQUIST_HZ;
     // unit: rel-screen
-    const float RADIUS_REL = 0.8;
+    const float RADIUS_REL = 1.0;
 
     return square(FREQ_FLOOR + px_radius / RADIUS_REL * FREQ_REL) * (fft_out_K - 1);
 }
