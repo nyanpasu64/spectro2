@@ -4,6 +4,7 @@ mod common;
 mod fft;
 mod renderer;
 mod sync;
+mod sync2;
 
 use anyhow::{Context, Error, Result};
 use clap::AppSettings;
