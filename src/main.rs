@@ -298,7 +298,7 @@ fn main() -> Result<()> {
             .unwrap()
     };
 
-    println!("before");
+    println!("Opening audio device...");
     stream.play().unwrap();
 
     let event_loop = EventLoop::new();
