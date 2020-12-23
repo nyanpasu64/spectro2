@@ -1,17 +1,18 @@
 // DFT/FFT math formulas have uppercase variables.
 #![allow(non_snake_case)]
+mod common;
 mod fft;
 mod renderer;
+mod sync;
 
 use anyhow::{Context, Error, Result};
-use atomicbox::AtomicBox;
-use core::sync::atomic::Ordering;
+use common::SpectrumFrameRef;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
-use rustfft::num_traits::Zero;
 use spin_sleep::LoopHelper;
+use std::cmp::min;
 use std::io::{self, Write};
-use std::{cmp::min, sync::atomic::AtomicBool, sync::Arc};
+use sync::new_spectrum_cell;
 use winit::{
     dpi::PhysicalSize,
     event::*,
@@ -110,6 +111,12 @@ pub struct Opt {
     #[structopt(short, long)]
     terminal_print: bool,
 
+    /// If passed, always renders new frames, even if the spectrum is unchanged.
+    /// (A new spectrum is computed every --redraw-size samples.)
+    /// Increases GPU usage and has no real benefit.
+    #[structopt(long)]
+    render_unchanged: bool,
+
     /// If passed, prints FPS to the terminal.
     #[structopt(long)]
     print_fps: bool,
@@ -129,40 +136,6 @@ impl Opt {
         }
 
         Ok(())
-    }
-}
-
-/// The data to be rendered in one frame.
-pub struct SpectrumFrame {
-    spectrum: FftVec,
-    prev_spectrum: FftVec,
-}
-
-impl SpectrumFrame {
-    fn new(spectrum_size: usize) -> SpectrumFrame {
-        SpectrumFrame {
-            spectrum: vec![FftSample::zero(); spectrum_size],
-            prev_spectrum: vec![FftSample::zero(); spectrum_size],
-        }
-    }
-}
-
-pub struct SpectrumFrameRef<'a> {
-    spectrum: &'a FftSlice,
-    prev_spectrum: &'a FftSlice,
-}
-
-struct AtomicSpectrum {
-    data: AtomicBox<SpectrumFrame>,
-    available: AtomicBool,
-}
-
-impl AtomicSpectrum {
-    fn new(spectrum_size: usize) -> AtomicSpectrum {
-        AtomicSpectrum {
-            data: AtomicBox::new(Box::new(SpectrumFrame::new(spectrum_size))),
-            available: false.into(),
-        }
     }
 }
 
@@ -275,31 +248,20 @@ fn main() -> Result<()> {
         window_type: WindowType::Hann,
     });
     let spectrum_size = fft_vec_buffer.spectrum_size();
-    let new_frame = || Box::new(SpectrumFrame::new(spectrum_size));
 
-    let atomic_fft = Arc::new(AtomicSpectrum::new(spectrum_size));
+    let (mut writer, mut reader) = new_spectrum_cell(spectrum_size);
 
     let stream = {
-        let mut scratch_fft = Some(new_frame());
-        let atomic_fft = atomic_fft.clone();
         let mut spectrum_callback = move |frame: SpectrumFrameRef| {
             {
-                let scratch_fft = scratch_fft.as_deref_mut().unwrap();
+                let scratch_fft = writer.get_mut();
                 scratch_fft.spectrum.copy_from_slice(frame.spectrum);
                 scratch_fft
                     .prev_spectrum
                     .copy_from_slice(frame.prev_spectrum);
             }
 
-            scratch_fft = Some(
-                atomic_fft
-                    .data
-                    .swap(scratch_fft.take().unwrap(), Ordering::AcqRel),
-            );
-            // If atomic_fft.data gets read and swapped before we write true,
-            // the next swap will receive stale data.
-            // This is possible but rare and probably doesn't matter.
-            atomic_fft.available.store(true, Ordering::Release);
+            writer.publish();
         };
 
         let print_to_terminal = opt.terminal_print;
@@ -353,7 +315,6 @@ fn main() -> Result<()> {
     // Since main can't be async, we're going to need to block
     let mut state = block_on(renderer::State::new(&window, &opt, config.sample_rate.0))
         .context("Failed to initialize renderer")?;
-    let mut received_fft = Some(new_frame());
 
     println!("GPU backend: {:?}", state.adapter_info().backend);
 
@@ -370,6 +331,7 @@ fn main() -> Result<()> {
     };
 
     let print_fps = opt.print_fps;
+    let render_unchanged = opt.render_unchanged;
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -401,23 +363,12 @@ fn main() -> Result<()> {
             // apparently it's unnecessary to request_redraw() and RedrawRequested
             // when drawing on every frame, idk?
 
-            // might as well take the "yolo" approach,
-            // and just ignore the possibility of occasional single-frame desyncs
-            // and stale/missing updates.
-            // this code needs to be rewritten once I add multi-frame history.
-            if atomic_fft.available.swap(false, Ordering::Acquire) {
-                received_fft = Some(
-                    atomic_fft
-                        .data
-                        .swap(received_fft.take().unwrap(), Ordering::AcqRel),
-                );
-            }
-
-            {
-                let received_fft = received_fft.as_deref().unwrap();
+            let changed = reader.fetch();
+            if changed || render_unchanged {
+                let received_fft = reader.get();
                 state.update(received_fft);
+                state.render();
             }
-            state.render();
 
             // Print FPS.
             if print_fps {

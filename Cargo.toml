@@ -15,11 +15,11 @@ shaderc = "0.7.0"
 wgpu = "0.6.0"
 futures = "0.3.5"
 bytemuck = "1.4.1"
-atomicbox = { path = "3rdparty/atomicbox-0.3.0", version = "0.3.0" }
 anyhow = "1.0.32"
 structopt = { version = "0.3.17", default-features = false }
 itertools = "0.9.0"
 spin_sleep = { path = "3rdparty/spin_sleep-1.0.0" }
+atomig = "0.2.0"
 
 [dependencies.winit]
 version = "0.24.0"
