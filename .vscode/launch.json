@@ -12,15 +12,15 @@
                 "args": [
                     "build",
                     "--bin=spectro2",
-                    "--package=spectro2"
+                    "--package=spectro2",
                 ],
                 "filter": {
                     "name": "spectro2",
-                    "kind": "bin"
-                }
+                    "kind": "bin",
+                },
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
         },
         {
             "type": "lldb",
@@ -31,15 +31,15 @@
                     "test",
                     "--no-run",
                     "--bin=spectro2",
-                    "--package=spectro2"
+                    "--package=spectro2",
                 ],
                 "filter": {
                     "name": "spectro2",
-                    "kind": "bin"
-                }
+                    "kind": "bin",
+                },
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
-        }
-    ]
+            "cwd": "${workspaceFolder}",
+        },
+    ],
 }
