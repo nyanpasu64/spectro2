@@ -605,6 +605,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "flip-cell"
+version = "0.1.0"
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1824,6 +1828,7 @@ dependencies = [
  "clap",
  "cpal",
  "dsp",
+ "flip-cell",
  "futures",
  "itertools",
  "realfft",

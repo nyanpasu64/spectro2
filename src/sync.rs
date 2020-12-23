@@ -1,5 +1,5 @@
 use crate::common::SpectrumFrame;
-use crate::sync2::{FlipCell, FlipReader, FlipWriter};
+use flip_cell::{FlipCell, FlipReader, FlipWriter};
 
 type SpectrumWriter = FlipWriter<SpectrumFrame>;
 type SpectrumReader = FlipReader<SpectrumFrame>;

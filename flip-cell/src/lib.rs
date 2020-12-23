@@ -72,7 +72,7 @@ impl<T> FlipCell<T> {
         let shared_state = 0.into();
 
         let writer = Arc::new(FlipCell { data, shared_state });
-        let reader = writer.clone();
+        let reader = Arc::clone(&writer);
         (
             FlipWriter {
                 cell: writer,
@@ -86,7 +86,6 @@ impl<T> FlipCell<T> {
         )
     }
 
-    #[allow(dead_code)]
     pub fn new_clone(value: T) -> (FlipWriter<T>, FlipReader<T>)
     where
         T: Clone,
@@ -94,7 +93,6 @@ impl<T> FlipCell<T> {
         Self::new3(value.clone(), value.clone(), value)
     }
 
-    #[allow(dead_code)]
     pub fn new_default() -> (FlipWriter<T>, FlipReader<T>)
     where
         T: Default,

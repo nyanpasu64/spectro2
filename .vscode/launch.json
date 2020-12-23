@@ -41,5 +41,24 @@
             "args": [],
             "cwd": "${workspaceFolder}",
         },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'flip-cell'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=flip-cell",
+                ],
+                "filter": {
+                    "name": "flip-cell",
+                    "kind": "lib",
+                },
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+        },
     ],
 }
