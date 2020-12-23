@@ -10,6 +10,7 @@
 //! - Test for UB using miri and loom
 //! - Add cache padding between entries in SpectrumCell
 use std::cell::UnsafeCell;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 
@@ -62,16 +63,51 @@ pub struct FlipCell<T> {
 unsafe impl<T> Sync for FlipCell<T> where T: Send {}
 unsafe impl<T> Send for FlipCell<T> where T: Send {}
 
-impl<T> FlipCell<T> {
-    pub fn new3(shared_v: T, writer_v: T, reader_v: T) -> (FlipWriter<T>, FlipReader<T>) {
-        let data = [
-            UnsafeCell::new(shared_v),
-            UnsafeCell::new(writer_v),
-            UnsafeCell::new(reader_v),
-        ];
-        let shared_state = 0.into();
+pub type ArcWriter<T> = FlipWriter<Arc<FlipCell<T>>>;
+pub type ArcReader<T> = FlipReader<Arc<FlipCell<T>>>;
 
-        let writer = Arc::new(FlipCell { data, shared_state });
+pub type RefWriter<'a, T> = FlipWriter<&'a FlipCell<T>>;
+pub type RefReader<'a, T> = FlipReader<&'a FlipCell<T>>;
+
+impl<T> FlipCell<T> {
+    pub fn new3(v0: T, v1: T, v2: T) -> Self {
+        let data = [
+            UnsafeCell::new(v0),
+            UnsafeCell::new(v1),
+            UnsafeCell::new(v2),
+        ];
+
+        FlipCell {
+            data,
+            shared_state: 0.into(), // Placeholder, will be overwritten.
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn new_clone(value: T) -> Self
+    where
+        T: Clone,
+    {
+        Self::new3(value.clone(), value.clone(), value)
+    }
+
+    #[allow(dead_code)]
+    pub fn new_default() -> Self
+    where
+        T: Default,
+    {
+        Self::new3(T::default(), T::default(), T::default())
+    }
+
+    /// Moves self: FlipCell into the heap,
+    /// and returns a writer and reader object which share ownership over the FlipCell.
+    pub fn into_arc(mut self) -> (ArcWriter<T>, ArcReader<T>) {
+        self = FlipCell {
+            data: self.data,
+            shared_state: 0.into(),
+        };
+
+        let writer = Arc::new(self);
         let reader = writer.clone();
         (
             FlipWriter {
@@ -86,20 +122,23 @@ impl<T> FlipCell<T> {
         )
     }
 
-    #[allow(dead_code)]
-    pub fn new_clone(value: T) -> (FlipWriter<T>, FlipReader<T>)
-    where
-        T: Clone,
-    {
-        Self::new3(value.clone(), value.clone(), value)
-    }
+    /// Returns a writer and reader object which borrow self.
+    /// Does not require heap allocation, but difficult to use safely
+    /// (send the returned values to different threads and ensure they don't outlive self).
+    pub fn get_ref<'a>(&'a mut self) -> (RefWriter<'a, T>, RefReader<'a, T>) {
+        self.shared_state = 0.into();
 
-    #[allow(dead_code)]
-    pub fn new_default() -> (FlipWriter<T>, FlipReader<T>)
-    where
-        T: Default,
-    {
-        Self::new3(T::default(), T::default(), T::default())
+        (
+            FlipWriter {
+                cell: &*self,
+                write_index: 1,
+            },
+            FlipReader {
+                cell: &*self,
+                read_index: 2,
+                is_initial: true,
+            },
+        )
     }
 }
 
@@ -109,12 +148,18 @@ const FRESH_FLAG: u8 = 0b100;
 
 /// Used to write and publish values into a `FlipCell`.
 /// See `FlipCell` docs for details.
-pub struct FlipWriter<T> {
-    cell: Arc<FlipCell<T>>,
+pub struct FlipWriter<Ptr> {
+    cell: Ptr,
     write_index: u8,
 }
 
-impl<T> FlipWriter<T> {
+// It feels wrong/backwards that in Rust, you can infer `T` for a user-supplied fixed `Ptr`,
+// through a type bound that constrains `Ptr` to implement a trait involving `T`...
+// Also i'm afraid that someone could use a pathological type implementing Deref to violate memory safety.
+impl<T, Ptr> FlipWriter<Ptr>
+where
+    Ptr: Deref<Target = FlipCell<T>>,
+{
     /// Obtain a mutable reference to the T we own in the FlipCell.
     pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.cell.data[self.write_index as usize].get() }
@@ -137,15 +182,18 @@ impl<T> FlipWriter<T> {
 
 /// Used to fetch the latest value from a `FlipCell`.
 /// See `FlipCell` docs for details.
-pub struct FlipReader<T> {
-    cell: Arc<FlipCell<T>>,
+pub struct FlipReader<Ptr> {
+    cell: Ptr,
     read_index: u8,
 
     /// True if fetch() has never been called.
     is_initial: bool,
 }
 
-impl<T> FlipReader<T> {
+impl<T, Ptr> FlipReader<Ptr>
+where
+    Ptr: Deref<Target = FlipCell<T>>,
+{
     /// Obtain a shared reference to the T we own in the FlipCell.
     pub fn get(&self) -> &T {
         unsafe { &*self.cell.data[self.read_index as usize].get() }
