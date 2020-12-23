@@ -13,6 +13,9 @@ edition = "2018"
 # only ["3rdparty/foo-0.1.0", "3rdparty/bar-0.2.0"] doesn't.
 exclude = ["3rdparty/dsp-0.8.1", "3rdparty/spin_sleep-1.0.0"]
 
+[features]
+loom = ["flip-cell/loom"]
+
 [dependencies]
 cpal = "0.13.1"
 rustfft = "4.0.0"

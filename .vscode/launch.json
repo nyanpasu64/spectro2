@@ -60,5 +60,28 @@
             "args": [],
             "cwd": "${workspaceFolder}",
         },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Loom tests in library 'flip-cell'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=flip-cell",
+                    "--features",
+                    "loom",
+                ],
+                "filter": {
+                    "name": "flip-cell",
+                    "kind": "lib",
+                },
+            },
+            "args": [
+                "loom_",
+            ],
+            "cwd": "${workspaceFolder}",
+        },
     ],
 }

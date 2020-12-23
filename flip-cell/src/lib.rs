@@ -9,9 +9,18 @@
 //! TODO:
 //! - Test for UB using miri and loom
 //! - Add cache padding between entries in SpectrumCell
-use std::cell::UnsafeCell;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::Arc;
+
+mod dep {
+    #[cfg(feature = "loom")]
+    use loom as lib;
+    #[cfg(not(feature = "loom"))]
+    use std as lib;
+
+    pub use lib::cell::UnsafeCell;
+    pub use lib::sync::atomic::{AtomicU8, Ordering};
+    pub use lib::sync::Arc;
+}
+use dep::*;
 
 /// An atomic value written on one thread and read on another without tearing.
 ///
@@ -69,7 +78,7 @@ impl<T> FlipCell<T> {
             UnsafeCell::new(writer_v),
             UnsafeCell::new(reader_v),
         ];
-        let shared_state = 0.into();
+        let shared_state = SharedState::new(0);
 
         let writer = Arc::new(FlipCell { data, shared_state });
         let reader = Arc::clone(&writer);
@@ -114,8 +123,17 @@ pub struct FlipWriter<T> {
 
 impl<T> FlipWriter<T> {
     /// Obtain a mutable reference to the T we own in the FlipCell.
+    #[cfg(not(feature = "loom"))]
     pub fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.cell.data[self.write_index as usize].get() }
+    }
+
+    #[cfg(feature = "loom")]
+    pub fn with_mut<F, R>(&mut self, f: F) -> R
+    where
+        F: FnOnce(&mut T) -> R,
+    {
+        unsafe { self.cell.data[self.write_index as usize].with_mut(|p| f(&mut *p)) }
     }
 
     /// Publish the currently owned FlipCell so it can be fetched by
@@ -145,8 +163,17 @@ pub struct FlipReader<T> {
 
 impl<T> FlipReader<T> {
     /// Obtain a shared reference to the T we own in the FlipCell.
+    #[cfg(not(feature = "loom"))]
     pub fn get(&self) -> &T {
         unsafe { &*self.cell.data[self.read_index as usize].get() }
+    }
+
+    #[cfg(feature = "loom")]
+    pub fn with<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&T) -> R,
+    {
+        unsafe { self.cell.data[self.read_index as usize].with(|p| f(&*p)) }
     }
 
     /// If the writer thread (FlipWriter) has published a new version
@@ -177,5 +204,51 @@ impl<T> FlipReader<T> {
 
         self.read_index = published_state & INDEX_MASK;
         true
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "loom")]
+mod tests {
+    use super::FlipCell;
+    use loom::thread;
+
+    /// Use Loom to test all reorderings of a reader and writer thread
+    /// interacting with FlipCell, and check for possible data races.
+    ///
+    /// This test fails with an UnsafeCell concurrent access (data race),
+    /// unless I mark both shared_state.swap() as AcqRel, not Acquire or Release.
+    /// I don't know if it's a false positive or not.
+    /// Nonetheless I'll leave both in place to be safe.
+    #[test]
+    fn loom_flip_cell() {
+        loom::model(|| {
+            let initial = 0i32;
+            let write_begin = 1i32;
+            let write_end = 4i32;
+
+            let (mut writer, mut reader) = FlipCell::new_clone(initial);
+
+            let write_thread = thread::spawn(move || {
+                for x in write_begin..write_end {
+                    writer.with_mut(|p| *p = x);
+                    writer.publish();
+                }
+            });
+
+            let mut last_seen = -1i32;
+            for _ in 0..8 {
+                let is_fresh = reader.fetch();
+                let x = reader.with(|&x| x);
+
+                assert!((initial..write_end).contains(&x));
+                assert!(x >= last_seen);
+                assert!((x > last_seen) == is_fresh);
+
+                last_seen = x;
+            }
+
+            write_thread.join().unwrap();
+        });
     }
 }
