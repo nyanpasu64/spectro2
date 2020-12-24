@@ -7,7 +7,6 @@
 //! Designed similarly to <https://github.com/Ralith/oddio/blob/55beef4/src/swap.rs>.
 //!
 //! TODO:
-//! - Test for UB using miri and loom
 //! - Add cache padding between entries in SpectrumCell
 
 mod dep {
@@ -61,15 +60,45 @@ use dep::*;
 ///
 /// {shared_state & INDEX_MASK, FlipWriter.write_index, FlipReader.read_index}
 /// must always be a permutation of 0..3.
+///
+/// # Send/Sync
+///
+/// `FlipCell<T>` is primarily intended for `T: Send`,
+/// because it transfers `&mut` access to `T` between threads.
+/// If `T: !Send` (like `MutexGuard`), it's practically useless unless `T: Sync`
+/// and has interior mutability (like `MutexGuard<Atomic>`).
+/// Which is basically useless as a contrived type.
+///
+/// If T is Send+Sync, FlipCell<T> is Send (or optionally Sync, it doesn't matter),
+/// and FlipReader<T> is Send+Sync.
+///
+/// If T is Send, FlipCell<T> is Send and FlipReader<T> is Send.
+///
+/// If T is Sync, FlipCell<T> is optionally Sync, and FlipReader<T> is Sync.
+///
+/// If T is neither Send nor Sync, neither FlipCell nor FlipReader is Send/Sync.
 pub struct FlipCell<T> {
     // TODO cache-align all of these variables
     data: [UnsafeCell<T>; 3],
     shared_state: SharedState,
 }
 
-/// Based of Mutex's impls. Hopefully sound.
-unsafe impl<T> Sync for FlipCell<T> where T: Send {}
-unsafe impl<T> Send for FlipCell<T> where T: Send {}
+// UnsafeCell<T> is Send if T is Send, so we don't need an unsafe impl.
+
+/// There is no reason to share `&FlipCell` across multiple threads.
+/// `FlipCell` instances cannot be publicly obtained.
+/// Even if it was, the only methods it would expose (to convert into (ArcWriter, ArcReader)
+/// or borrow as (RefWriter, RefReader)) would require `self` or `&mut self` respectively,
+/// and it would have no `&self` methods.
+///
+/// Implementing Sync is harmless and makes the type (dubiously) more general.
+unsafe impl<T> Sync for FlipCell<T> where T: Sync {}
+
+// FlipReader/Writer contain Arc<FlipCell<T>>,
+// and missing either Send or Sync for FlipCell<T> makes Arc<FlipCell<T>> !Send and !Sync.
+// But FlipReader/Writer can legally be Send/Sync because they don't allow cloning the Arc,
+// and don't provide aliased access to the T they point to.
+// We will unsafely implement them by hand.
 
 impl<T> FlipCell<T> {
     pub fn new3(shared_v: T, writer_v: T, reader_v: T) -> (FlipWriter<T>, FlipReader<T>) {
@@ -121,6 +150,11 @@ pub struct FlipWriter<T> {
     write_index: u8,
 }
 
+/// &mut FlipWriter<T> acts like &mut T, including the ability to swap it.
+unsafe impl<T> Send for FlipWriter<T> where T: Send {}
+/// &FlipWriter<T> provides no access whatsoever, so implementing Sync is harmless.
+unsafe impl<T> Sync for FlipWriter<T> where T: Sync {}
+
 impl<T> FlipWriter<T> {
     /// Obtain a mutable reference to the T we own in the FlipCell.
     #[cfg(not(feature = "loom"))]
@@ -160,6 +194,11 @@ pub struct FlipReader<T> {
     /// True if fetch() has never been called.
     is_initial: bool,
 }
+
+/// &mut FlipReader<T> acts like &mut T, but only the ability to swap it.
+unsafe impl<T> Send for FlipReader<T> where T: Send {}
+/// &FlipWriter<T> acts like &T.
+unsafe impl<T> Sync for FlipReader<T> where T: Sync {}
 
 impl<T> FlipReader<T> {
     /// Obtain a shared reference to the T we own in the FlipCell.
@@ -250,5 +289,100 @@ mod tests {
 
             write_thread.join().unwrap();
         });
+    }
+}
+
+#[cfg(test)]
+#[cfg(not(feature = "loom"))]
+mod tests {
+    use crate::FlipCell;
+
+    #[allow(dead_code)]
+    fn ensure_sync<T: Sync>(_: &T) {}
+
+    #[allow(dead_code)]
+    fn ensure_send<T: Send>(_: &mut T) {}
+
+    /// Ensure that we can wrap a !Send type in a FlipCell,
+    /// as long as we don't move a reader/writer across threads.
+    #[test]
+    fn not_send() {
+        use std::marker::PhantomData;
+        use std::sync::MutexGuard;
+
+        #[derive(Clone)]
+        struct NotSend(i32, PhantomData<MutexGuard<'static, i32>>);
+
+        let (mut writer, reader) = FlipCell::new_clone(NotSend(0, PhantomData));
+
+        writer.get_mut().0 = 2;
+        ensure_sync(&reader);
+    }
+
+    /// Ensure that we can wrap a !Sync type in a FlipCell,
+    /// as long as we don't share a reader/writer across threads.
+    #[test]
+    fn not_sync() {
+        use std::cell::RefCell;
+        use std::thread;
+
+        let not_sync = RefCell::new(0i32);
+        let (mut writer, mut reader) = FlipCell::new_clone(not_sync);
+
+        let writer_th = thread::spawn(move || {
+            writer.get_mut();
+            writer.publish();
+        });
+        let reader_th = thread::spawn(move || {
+            reader.fetch();
+            reader.get();
+        });
+
+        writer_th.join().unwrap();
+        reader_th.join().unwrap();
+    }
+
+    /// Can we obtain &T on multiple threads, pointing to a non-Sync type?
+    /// If so, it can lead to memory unsafety.
+    ///
+    /// Currently, this code (which contains data races) is rejected properly.
+    /// To verify, uncomment this test and ensure it fails to build.
+    #[test]
+    fn miri_reader_sync() {
+        // use std::cell::Cell;
+        // use std::sync::Arc;
+        // use std::thread;
+
+        // let not_sync = Cell::new(0);
+        // let (_, reader) = FlipCell::new_clone(not_sync);
+        // let reader = Arc::new(reader);
+
+        // let mut threads = vec![];
+        // for i in 0..3 {
+        //     let reader = Arc::clone(&reader);
+        //     threads.push(thread::spawn(move || {
+        //         reader.get().replace(i);
+        //     }));
+        // }
+
+        // for thread in threads {
+        //     thread.join().unwrap();
+        // }
+    }
+
+    /// What is the lifetime of a FlipCell constructed from a non-'static value?
+    ///
+    /// Currently the lifetime is properly bounded.
+    /// To verify, uncomment this test and ensure it fails to build.
+    #[test]
+    fn miri_lifetime() {
+        // use std::sync::Arc;
+
+        // let (mut writer, mut reader) = {
+        //     let mut non_static = 0;
+        //     let non_static = Arc::new(&mut non_static);
+        //     let (writer, reader) = FlipCell::new_clone(non_static);
+        //     (writer, reader)
+        // };
     }
 }

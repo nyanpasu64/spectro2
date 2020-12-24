@@ -14,7 +14,12 @@ Note that this project has custom flags for debug and release builds. Dependenci
 
 The `flip-cell` crate is shipped in this repository. It is tested using Loom and Miri to check for undefined behavior in unsafe code.
 
-If you use VSCode with CodeLLDB extension, the bundled launch.json will allow you to run `flip-cell`'s unit tests in Loom, to check for concurrency/ordering bugs.
+If you use VSCode with CodeLLDB extension, the bundled launch.json will allow you to run a subset of `flip-cell`'s unit tests in Loom, to check for concurrency/ordering bugs. I have not created a configuration for Miri yet.
+
+If you are not using VSCode, you can launch the tests using the following:
+
+- Loom: `cargo test -p flip-cell --features loom`
+- Miri: `cargo +nightly miri test --target-dir miri -p flip-cell` (Miri cannot use the same target directory as your regular builds)
 
 ## Usage
 
