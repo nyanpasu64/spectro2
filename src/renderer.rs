@@ -117,6 +117,9 @@ impl State {
             height: size.height,
             present_mode: wgpu::PresentMode::Immediate,
         };
+        // PresentMode::Fifo adds around 3 frames of latency.
+        // And polling the device before/after submitting each frame doesn't help.
+
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
         let vs_src = load_from_file("shaders/shader.vert")?;

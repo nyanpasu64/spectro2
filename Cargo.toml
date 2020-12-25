@@ -20,6 +20,7 @@ structopt = { version = "0.3.17", default-features = false }
 itertools = "0.9.0"
 spin_sleep = { path = "3rdparty/spin_sleep-1.0.0" }
 atomig = "0.2.0"
+clap = { version = "2.33.3", default-features = false }
 
 [dependencies.winit]
 version = "0.24.0"

@@ -6,6 +6,7 @@ mod renderer;
 mod sync;
 
 use anyhow::{Context, Error, Result};
+use clap::AppSettings;
 use common::SpectrumFrameRef;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
@@ -22,6 +23,8 @@ use winit::{
 
 const MIN_FFT_SIZE: usize = 4;
 const MAX_FFT_SIZE: usize = 16384;
+
+const APP_NAME: &'static str = env!("CARGO_PKG_NAME");
 
 use structopt::StructOpt;
 
@@ -60,27 +63,29 @@ fn parse_redraw_size(src: &str) -> Result<usize> {
 
 /// Real-time phase-magnitude spectrum viewer
 #[derive(StructOpt, Debug)]
-#[structopt(name = "spectro2")]
+#[structopt(
+    name = APP_NAME,
+    global_settings(&[AppSettings::DeriveDisplayOrder, AppSettings::UnifiedHelpMessage]),
+)]
 pub struct Opt {
-    /// If passed, will listen to speaker instead of microphone.
-    /// Note that this has a small amount of latency.
-    /// You can route speakers through VB-Audio Virtual Cable.
-    /// This will delay audio by more than the video latency,
-    /// but you may prefer it to not using it.
+    /// If passed, will listen to output device (speaker) instead of input (microphone).
     #[structopt(short, long)]
     loopback: bool,
 
     /// If passed, will override which device is selected.
-    /// This overrides --loopback for picking devices, but not picking sample formats.
+    ///
+    /// This overrides --loopback for picking devices.
+    /// However, you still need to pass --loopback if you pass an output device (speaker)
+    /// to --device-index.
     #[structopt(short, long)]
     device_index: Option<usize>,
 
-    /// How much to amplify the incoming signal
-    /// before sending it to the spectrum viewer.
+    /// How much to amplify the incoming signal before sending it to the spectrum viewer.
     #[structopt(short, long, default_value = "20")]
     volume: f32,
 
     /// Number of samples to use in each FFT block.
+    ///
     /// Increasing this value makes it easier to identify pitches,
     /// but increases audio latency and smearing in time.
     /// Must be a multiple of --redraw-size.
@@ -88,6 +93,7 @@ pub struct Opt {
     fft_size: usize,
 
     /// Number of samples to advance time before recalculating FFT.
+    ///
     /// Decreasing this value causes FFTs to be computed more often,
     /// increasing CPU usage but reducing latency and stuttering.
     ///
@@ -97,29 +103,31 @@ pub struct Opt {
     redraw_size: usize,
 
     /// Limit the FPS of the rendering thread.
+    ///
     /// If set to 0, FPS is unbounded and this program will max out the CPU and/or GPU.
     ///
-    /// This program does not support vsync,
-    /// because wgpu implements it strangely, adding around 3 frames of latency.
-    /// And polling the device before/after submitting each frame doesn't help.
+    /// This program does not support vsync because it adds around 3 frames of latency.
     #[structopt(long, default_value = "200")]
     fps: u32,
-
-    /// If passed, prints a peak meter to the terminal,
-    /// which may have lower latency to incoming audio than the spectrum viewer.
-    /// This will generate a lot of terminal output.
-    #[structopt(short, long)]
-    terminal_print: bool,
-
-    /// If passed, always renders new frames, even if the spectrum is unchanged.
-    /// (A new spectrum is computed every --redraw-size samples.)
-    /// Increases GPU usage and has no real benefit.
-    #[structopt(long)]
-    render_unchanged: bool,
 
     /// If passed, prints FPS to the terminal.
     #[structopt(long)]
     print_fps: bool,
+
+    /// [DEBUG] If passed, prints a peak meter to the terminal.
+    ///
+    /// Terminal output may have lower latency than the spectrum viewer.
+    /// This will generate a lot of terminal output.
+    #[structopt(short, long)]
+    terminal_print: bool,
+
+    /// [DEBUG] If passed, always renders new frames, even if the spectrum is unchanged.
+    ///
+    /// (A new spectrum is computed every --redraw-size samples.)
+    ///
+    /// Increases GPU usage and has no real benefit.
+    #[structopt(long)]
+    render_unchanged: bool,
 }
 
 impl Opt {
@@ -290,15 +298,17 @@ fn main() -> Result<()> {
             .unwrap()
     };
 
-    println!("before");
+    println!("Opening audio device...");
     stream.play().unwrap();
 
     let event_loop = EventLoop::new();
     let window = {
-        let window_builder = WindowBuilder::new().with_inner_size(PhysicalSize {
-            width: 1024,
-            height: 768,
-        });
+        let window_builder = WindowBuilder::new()
+            .with_inner_size(PhysicalSize {
+                width: 1024,
+                height: 768,
+            })
+            .with_title(APP_NAME);
         #[cfg(target_os = "windows")]
         let window_builder = {
             // Work around cpal/winit crash.
