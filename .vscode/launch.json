@@ -12,15 +12,15 @@
                 "args": [
                     "build",
                     "--bin=spectro2",
-                    "--package=spectro2"
+                    "--package=spectro2",
                 ],
                 "filter": {
                     "name": "spectro2",
-                    "kind": "bin"
-                }
+                    "kind": "bin",
+                },
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
         },
         {
             "type": "lldb",
@@ -31,15 +31,57 @@
                     "test",
                     "--no-run",
                     "--bin=spectro2",
-                    "--package=spectro2"
+                    "--package=spectro2",
                 ],
                 "filter": {
                     "name": "spectro2",
-                    "kind": "bin"
-                }
+                    "kind": "bin",
+                },
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
-        }
-    ]
+            "cwd": "${workspaceFolder}",
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'flip-cell'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=flip-cell",
+                ],
+                "filter": {
+                    "name": "flip-cell",
+                    "kind": "lib",
+                },
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug Loom tests in library 'flip-cell'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=flip-cell",
+                    "--features",
+                    "loom",
+                ],
+                "filter": {
+                    "name": "flip-cell",
+                    "kind": "lib",
+                },
+            },
+            "args": [
+                "loom_",
+            ],
+            "cwd": "${workspaceFolder}",
+        },
+    ],
 }

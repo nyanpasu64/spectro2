@@ -10,6 +10,17 @@ Clone the repo and run `cargo run`. `cargo run --release` will not generate debu
 
 Note that this project has custom flags for debug and release builds. Dependencies like the FFT algorithm are compiled in `-O2` in both debug and release mode; only this crate has optimization disabled in debug mode. See `.cargo/config.toml` for details.
 
+### Testing `flip-cell`
+
+The `flip-cell` crate is shipped in this repository. It is tested using Loom and Miri to check for undefined behavior in unsafe code.
+
+If you use VSCode with CodeLLDB extension, the bundled launch.json will allow you to run a subset of `flip-cell`'s unit tests in Loom, to check for concurrency/ordering bugs. I have not created a configuration for Miri yet.
+
+If you are not using VSCode, you can launch the tests using the following:
+
+- Loom: `cargo test -p flip-cell --features loom`
+- Miri: `cargo +nightly miri test --target-dir miri -p flip-cell` (Miri cannot use the same target directory as your regular builds)
+
 ## Usage
 
 If you type `cargo run [...] --`, all arguments after the double-hyphen are passed to `spectro2` instead of `cargo run`.

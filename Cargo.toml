@@ -6,6 +6,16 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+# Adding a [workspace] key turns all path dependencies into workspace members.
+# Excluding "3rdparty" or "3rdparty/*" fills my Cargo.lock with garbage
+# (all features of dependencies, including transitive dependencies I don't use)...
+# only ["3rdparty/foo-0.1.0", "3rdparty/bar-0.2.0"] doesn't.
+exclude = ["3rdparty/dsp-0.8.1", "3rdparty/spin_sleep-1.0.0"]
+
+[features]
+loom = ["flip-cell/loom"]
+
 [dependencies]
 cpal = "0.13.1"
 rustfft = "4.0.0"
@@ -19,8 +29,8 @@ anyhow = "1.0.32"
 structopt = { version = "0.3.17", default-features = false }
 itertools = "0.9.0"
 spin_sleep = { path = "3rdparty/spin_sleep-1.0.0" }
-atomig = "0.2.0"
 clap = { version = "2.33.3", default-features = false }
+flip-cell = { path = "flip-cell" }
 
 [dependencies.winit]
 version = "0.24.0"

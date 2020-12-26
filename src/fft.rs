@@ -30,7 +30,7 @@ pub struct FftConfig {
     /// Must be a factor of size.
     pub redraw_interval: usize,
 
-    /// The incoming wave is [frame][channel]i16.
+    /// The incoming wave is \[frame\]\[channel\]i16.
     /// This stores the number of channels to average (or eventually separate out).
     /// Must be >= 1.
     pub channels: ChannelCount,
