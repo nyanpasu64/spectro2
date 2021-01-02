@@ -68,10 +68,6 @@ fn parse_redraw_size(src: &str) -> Result<usize> {
     global_settings(&[AppSettings::DeriveDisplayOrder, AppSettings::UnifiedHelpMessage]),
 )]
 pub struct Opt {
-    /// If passed, will listen to output device (speaker) instead of input (microphone).
-    #[structopt(short, long)]
-    loopback: bool,
-
     /// If passed, will override which device is selected.
     ///
     /// This overrides --loopback for picking devices.
@@ -79,6 +75,27 @@ pub struct Opt {
     /// to --device-index.
     #[structopt(short, long)]
     device_index: Option<usize>,
+
+    /// Override the default sampling rate of the audio device.
+    ///
+    /// If not passed, on Linux PulseAudio setups, spectro2 opens the input device at 384000 Hz
+    /// and not the actual PulseAudio sampling rate.
+    #[structopt(short, long)]
+    sample_rate: Option<u32>,
+
+    /// Override the default channel count of the audio device.
+    ///
+    /// If not passed, on Linux PulseAudio setups, spectro2 opens the input device with 1 channel
+    /// and not the actual PulseAudio channel count.
+    #[structopt(short, long)]
+    channels: Option<u32>,
+
+    /// If passed, will listen to output device (speaker) instead of input (microphone).
+    ///
+    /// Primarily intended for Windows WASAPI. Does not work on Linux PulseAudio;
+    /// instead use pavucontrol to switch the audio input to speaker loopback.
+    #[structopt(short, long)]
+    loopback: bool,
 
     /// How much to amplify the incoming signal before sending it to the spectrum viewer.
     #[structopt(short, long, default_value = "20")]
@@ -204,7 +221,7 @@ fn main() -> Result<()> {
         }
     );
 
-    let supported_configs_range: Vec<cpal::SupportedStreamConfigRange> = if opt.loopback {
+    let supported_config_ranges: Vec<cpal::SupportedStreamConfigRange> = if opt.loopback {
         device
             .supported_output_configs()
             .expect("error while querying configs")
@@ -217,7 +234,7 @@ fn main() -> Result<()> {
     };
 
     println!("Supported configs:");
-    for cfg in &supported_configs_range {
+    for cfg in &supported_config_ranges {
         println!("- {:?}", cfg)
     }
     println!("");
@@ -225,11 +242,58 @@ fn main() -> Result<()> {
     // TODO pick native sampling rate.
     // ALSA Pipewire has a max_sample_rate of 384000,
     // even if device doesn't run at that rate.
-    let supported_config: cpal::SupportedStreamConfig = supported_configs_range
-        .into_iter()
-        .next()
-        .expect("no supported config?!")
-        .with_max_sample_rate();
+    let supported_config: cpal::SupportedStreamConfig = {
+        // In cpal, each SupportedStreamConfigRange has a single channel count.
+        // Pick either the first SupportedStreamConfigRange,
+        // or the first one with the user-specified channel count.
+        let range: cpal::SupportedStreamConfigRange = {
+            let first_range = supported_config_ranges
+                .get(0)
+                .expect("no supported config?!");
+
+            if let Some(channels) = opt.channels {
+                let first_valid_range = supported_config_ranges
+                    .iter()
+                    .filter(|range| range.channels() as u32 == channels)
+                    .next();
+                match first_valid_range {
+                    Some(range) => range,
+                    None => {
+                        println!(
+                            "Requested channel count {} not supported, falling back to {}",
+                            channels,
+                            first_range.channels()
+                        );
+                        first_range
+                    }
+                }
+            } else {
+                first_range
+            }
+        }
+        .clone();
+        drop(supported_config_ranges);
+
+        // In cpal, each SupportedStreamConfigRange has a range of sampling rates.
+        // Pick the maximum sampling rate,
+        // or clamp the user-specified sampling rate within the allowed range.
+        if let Some(mut sample_rate) = opt.sample_rate {
+            let min_sample_rate = range.min_sample_rate().0;
+            let max_sample_rate = range.max_sample_rate().0;
+
+            if !(min_sample_rate..=max_sample_rate).contains(&sample_rate) {
+                let clamped_rate = num_traits::clamp(sample_rate, min_sample_rate, max_sample_rate);
+                println!(
+                    "Requested sample rate {} not supported, falling back to {}",
+                    sample_rate, clamped_rate
+                );
+                sample_rate = clamped_rate;
+            }
+            range.with_sample_rate(cpal::SampleRate(sample_rate))
+        } else {
+            range.with_max_sample_rate()
+        }
+    };
 
     println!(
         "Supported buffer size: {:?}",

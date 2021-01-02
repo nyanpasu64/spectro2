@@ -1864,6 +1864,7 @@ dependencies = [
  "flip-cell",
  "futures",
  "itertools",
+ "num-traits",
  "realfft",
  "rustfft",
  "shaderc",

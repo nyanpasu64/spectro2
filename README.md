@@ -25,7 +25,9 @@ If you are not using VSCode, you can launch the tests using the following:
 
 If you type `cargo run [...] --`, all arguments after the double-hyphen are passed to `spectro2` instead of `cargo run`.
 
-Example usage: `cargo run -- --loopback --volume 100`
+On Windows, an example command-line is: `cargo run -- --loopback --volume 100`
+
+On Linux with PulseAudio, you need to specify the sampling rate (and channel count) manually: `cargo run -- --sample-rate 48000 --channels 2` . Additionally, `--loopback` does not work (because spectro2 talks to PulseAudio through the ALSA API), so you need to open pavucontrol to enable loopback capture ([instructions here](https://wiki.ubuntu.com/record_system_sound#Audio_Loopback_Recording_With_PulseAudio)).
 
 **SEIZURE WARNING:** Rapidly changing audio can cause flashing lights, especially once colored stereo is added.
 
