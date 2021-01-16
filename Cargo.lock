@@ -975,9 +975,9 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
+checksum = "37d572918e350e82412fe766d24b15e6682fb2ed2bbe018280caa810397cb319"
 dependencies = [
  "either",
 ]
@@ -1492,6 +1492,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3831453b3449ceb48b6d9c7ad7c96d5ea673e9b470a1dc578c2ce6521230884c"
 
 [[package]]
+name = "primal-check"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01419cee72c1a1ca944554e23d83e483e1bccf378753344e881de28b5487511d"
+dependencies = [
+ "num-integer",
+]
+
+[[package]]
 name = "proc-macro-crate"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1593,9 +1602,9 @@ dependencies = [
 
 [[package]]
 name = "realfft"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29a38036df3019137318614d1bbaa0c04459f51b8640c6c475f5435509f128cf"
+checksum = "78570e3808e54d89bbeeabe064a61923a023d3822023344a9257989316cb107e"
 dependencies = [
  "rustfft",
 ]
@@ -1665,13 +1674,14 @@ dependencies = [
 
 [[package]]
 name = "rustfft"
-version = "4.1.0"
+version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f107ffb2ec15915d932b7b1537fe4d6efb36955ee2b06f8f759c80a0725f80b1"
+checksum = "a2af893d9cfb30d3d2f2ac4bd2a071232143558e06e791dc768179f0089f68f8"
 dependencies = [
  "num-complex",
  "num-integer",
  "num-traits",
+ "primal-check",
  "strength_reduce",
  "transpose",
 ]
@@ -1828,9 +1838,9 @@ dependencies = [
  "flip-cell",
  "futures",
  "itertools",
+ "num-complex",
  "num-traits",
  "realfft",
- "rustfft",
  "shaderc",
  "spin_sleep",
  "structopt",

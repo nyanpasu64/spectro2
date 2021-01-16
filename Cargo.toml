@@ -18,20 +18,20 @@ loom = ["flip-cell/loom"]
 
 [dependencies]
 cpal = "0.13.1"
-rustfft = "4.0.0"
 dsp = { path = "3rdparty/dsp-0.8.1" }
-realfft = "0.3.0"
+realfft = "0.4.0"
 shaderc = "0.7.0"
 wgpu = "0.6.0"
 futures = "0.3.5"
 bytemuck = "1.4.1"
 anyhow = "1.0.32"
 structopt = { version = "0.3.17", default-features = false }
-itertools = "0.9.0"
+itertools = "0.10.0"
 spin_sleep = { path = "3rdparty/spin_sleep-1.0.0" }
 clap = { version = "2.33.3", default-features = false }
 flip-cell = { path = "flip-cell" }
 num-traits = "0.2.14"
+num-complex = "0.3.1"
 
 [dependencies.winit]
 version = "0.24.0"
