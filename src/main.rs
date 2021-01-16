@@ -258,7 +258,7 @@ fn main() -> Result<()> {
     if should_warn {
         // When cpal uses the ALSA API to talk to Pulse (or some other devices),
         // the OS-supplied options range is gibberish
-        // (ranging from 1 to 384000 Hz, and 1 to 32 channels).
+        // (ranging from 1 to 384000 Hz, 1 to 32 channels, and multiple sample formats).
         // The application must pick options itself.
         //
         // The conditional is an arbitrarily chosen heuristic for detecting cases
@@ -311,7 +311,10 @@ fn main() -> Result<()> {
             if let Some(channels) = opt.channels {
                 let first_valid_range = supported_config_ranges
                     .iter()
-                    .filter(|range| range.channels() as u32 == channels)
+                    .filter(|range| {
+                        range.channels() as u32 == channels
+                            && range.sample_format() == cpal::SampleFormat::I16
+                    })
                     .next();
                 match first_valid_range {
                     Some(range) => range,
@@ -394,10 +397,15 @@ fn main() -> Result<()> {
         };
 
         let print_to_terminal = opt.terminal_print;
+
+        // We only accept devices that output the i16 sample format.
+        // I haven't found a device that doesn't support i16 so far,
+        // but if necessary I could add a CLI argument to pick the sample format,
+        // and make this lambda or FftBuffer perform sample range conversion.
         device
             .build_input_stream(
                 &config,
-                move |data, _| {
+                move |data: &[i16], _| {
                     if print_to_terminal {
                         let peak = data
                             .iter()
