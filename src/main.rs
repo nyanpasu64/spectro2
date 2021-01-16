@@ -182,7 +182,7 @@ fn main() -> Result<()> {
 
     let devices: Vec<cpal::Device> = host
         .devices()
-        .expect("error when querying devices")
+        .context("error when querying devices")?
         .collect();
 
     println!("Devices:");
@@ -224,12 +224,12 @@ fn main() -> Result<()> {
     let supported_config_ranges: Vec<cpal::SupportedStreamConfigRange> = if opt.loopback {
         device
             .supported_output_configs()
-            .expect("error while querying configs")
+            .context("error while querying configs")?
             .collect()
     } else {
         device
             .supported_input_configs()
-            .expect("error while querying configs")
+            .context("error while querying configs")?
             .collect()
     };
 
@@ -249,7 +249,7 @@ fn main() -> Result<()> {
         let range: cpal::SupportedStreamConfigRange = {
             let first_range = supported_config_ranges
                 .get(0)
-                .expect("no supported config?!");
+                .context("no supported config?!")?;
 
             if let Some(channels) = opt.channels {
                 let first_valid_range = supported_config_ranges
@@ -359,11 +359,11 @@ fn main() -> Result<()> {
                 },
                 err_fn,
             )
-            .unwrap()
+            .context("Error building input stream")?
     };
 
-    println!("Opening audio device...");
-    stream.play().unwrap();
+    println!("Playing audio device...");
+    stream.play().context("Error playing audio device")?;
 
     let event_loop = EventLoop::new();
     let window = {
@@ -381,7 +381,9 @@ fn main() -> Result<()> {
             window_builder.with_drag_and_drop(false)
         };
 
-        window_builder.build(&event_loop).unwrap()
+        window_builder
+            .build(&event_loop)
+            .context("Error creating window")?
     };
 
     use futures::executor::block_on;
