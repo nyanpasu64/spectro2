@@ -2,7 +2,7 @@ use crate::common::{FftSample, FftSlice, SpectrumFrame};
 use crate::Opt;
 use anyhow::{Context, Result};
 use itertools::izip;
-use rustfft::num_traits::Zero;
+use num_traits::Zero;
 use std::{fs::File, io::Read, path::PathBuf, slice};
 use wgpu::util::DeviceExt;
 use winit::{event::*, window::Window};
