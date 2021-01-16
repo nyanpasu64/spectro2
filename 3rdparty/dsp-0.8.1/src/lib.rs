@@ -3,8 +3,6 @@
 //! Signals can be processed in Time or Frequency domain
 //!
 
-pub mod filter;
-pub mod fft;
 pub mod signal;
 pub mod spectrum;
 pub mod window;

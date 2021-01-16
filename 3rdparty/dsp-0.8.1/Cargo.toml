@@ -25,18 +25,10 @@ repository = "https://github.com/klangner/dsp"
 [[bench]]
 name = "gen_bench"
 harness = false
-[dependencies.arraydeque]
-version = "0.4"
-default-features = false
-
-[dependencies.itertools]
-version = "0.9"
 
 [dependencies.num-complex]
 version = "0.3"
 
-[dependencies.rustfft]
-version = "4"
 [dev-dependencies.assert_approx_eq]
 version = "1.1.0"
 
