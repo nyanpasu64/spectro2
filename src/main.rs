@@ -69,6 +69,10 @@ fn parse_redraw_size(src: &str) -> Result<usize> {
     global_settings(&[AppSettings::DeriveDisplayOrder, AppSettings::UnifiedHelpMessage]),
 )]
 pub struct Opt {
+    /// If passed, prints a list of audio devices, and stream modes for the chosen device.
+    #[structopt(short = "D", long)]
+    show_devices: bool,
+
     /// If passed, will override which device is selected.
     ///
     /// This overrides --loopback for picking devices.
@@ -186,20 +190,22 @@ fn main() -> Result<()> {
         .context("error when querying devices")?
         .collect();
 
-    println!("Devices:");
-    for (i, dev) in devices.iter().enumerate() {
-        println!(
-            "{}. {}",
-            i,
-            match &dev.name() {
-                Ok(s) => s.as_ref(),
-                Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
-            }
-        );
-        println!("    Input: {:?}", dev.default_input_config());
-        println!("    Output: {:?}", dev.default_output_config());
+    if opt.show_devices {
+        println!("Devices:");
+        for (i, dev) in devices.iter().enumerate() {
+            println!(
+                "{}. {}",
+                i,
+                match &dev.name() {
+                    Ok(s) => s.as_ref(),
+                    Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
+                }
+            );
+            println!("    Input: {:?}", dev.default_input_config());
+            println!("    Output: {:?}", dev.default_output_config());
+        }
+        println!("");
     }
-    println!("");
 
     // TODO add checkbox for toggling between input and loopback capture
     let device = if let Some(device_index) = opt.device_index {
@@ -234,18 +240,20 @@ fn main() -> Result<()> {
             .collect()
     };
 
-    println!("Supported configs:");
-    for cfg in &supported_config_ranges {
-        println!("- {:?}", cfg)
-    }
-    println!("");
-
     // ALSA expects options to be determined by the application, not the OS
     // (which supplies a range of possibilities).
     let is_alsa = host.id().name() == "ALSA";
 
     // If we're on ALSA and the user hasn't set both channel count and sampling rate, warn the user.
     let should_warn = is_alsa && !(opt.channels.is_some() && opt.sample_rate.is_some());
+
+    if opt.show_devices || should_warn {
+        println!("Supported configs:");
+        for cfg in &supported_config_ranges {
+            println!("- {:?}", cfg)
+        }
+        println!("");
+    };
 
     if should_warn {
         // When cpal uses the ALSA API to talk to Pulse (or some other devices),

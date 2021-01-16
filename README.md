@@ -38,14 +38,29 @@ USAGE:
     spectro2.exe [FLAGS] [OPTIONS]
 
 OPTIONS:
-    -l, --loopback
-            If passed, will listen to output device (speaker) instead of input (microphone)
+    -D, --show-devices
+            If passed, prints a list of audio devices, and stream modes for the chosen device
 
     -d, --device-index <device-index>
             If passed, will override which device is selected.
 
             This overrides --loopback for picking devices. However, you still need to pass --loopback if you pass an
             output device (speaker) to --device-index.
+    -s, --sample-rate <sample-rate>
+            Override the default sampling rate of the audio device.
+
+            If not passed, on Linux PulseAudio setups, spectro2 opens the input device at 384000 Hz and not the actual
+            PulseAudio sampling rate.
+    -c, --channels <channels>
+            Override the default channel count of the audio device.
+
+            If not passed, on Linux PulseAudio setups, spectro2 opens the input device with 1 channel and not the actual
+            PulseAudio channel count.
+    -l, --loopback
+            If passed, will listen to output device (speaker) instead of input (microphone).
+
+            Primarily intended for Windows WASAPI. Does not work on Linux PulseAudio; instead use pavucontrol to switch
+            the audio input to speaker loopback.
     -v, --volume <volume>
             How much to amplify the incoming signal before sending it to the spectrum viewer [default: 20]
 
