@@ -32,6 +32,7 @@ clap = { version = "2.33.3", default-features = false }
 flip-cell = { path = "flip-cell" }
 num-traits = "0.2.14"
 num-complex = "0.3.1"
+indoc = "1.0.3"
 
 [dependencies.winit]
 version = "0.24.0"

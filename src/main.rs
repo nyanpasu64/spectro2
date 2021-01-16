@@ -5,11 +5,12 @@ mod fft;
 mod renderer;
 mod sync;
 
-use anyhow::{Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 use clap::AppSettings;
 use common::SpectrumFrameRef;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
+use indoc::formatdoc;
 use spin_sleep::LoopHelper;
 use std::cmp::min;
 use std::io::{self, Write};
@@ -213,13 +214,13 @@ fn main() -> Result<()> {
         .context("no input device available")?
     };
 
-    println!(
-        "Input device: {}",
-        match &device.name() {
-            Ok(s) => s.as_ref(),
-            Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
-        }
-    );
+    let device_name = device.name();
+    let device_name = match &device_name {
+        Ok(ref s) => s.as_ref(),
+        Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
+    };
+
+    println!("Input device: {}", device_name);
 
     let supported_config_ranges: Vec<cpal::SupportedStreamConfigRange> = if opt.loopback {
         device
@@ -239,9 +240,57 @@ fn main() -> Result<()> {
     }
     println!("");
 
-    // TODO pick native sampling rate.
-    // ALSA Pipewire has a max_sample_rate of 384000,
-    // even if device doesn't run at that rate.
+    // ALSA expects options to be determined by the application, not the OS
+    // (which supplies a range of possibilities).
+    let is_alsa = host.id().name() == "ALSA";
+
+    // If we're on ALSA and the user hasn't set both channel count and sampling rate, warn the user.
+    let should_warn = is_alsa && !(opt.channels.is_some() && opt.sample_rate.is_some());
+
+    if should_warn {
+        // When cpal uses the ALSA API to talk to Pulse (or some other devices),
+        // the OS-supplied options range is gibberish
+        // (ranging from 1 to 384000 Hz, and 1 to 32 channels).
+        // The application must pick options itself.
+        //
+        // The conditional is an arbitrarily chosen heuristic for detecting cases
+        // where cpal's default rate or channel count are unacceptable.
+        //
+        // On my system, the "default" device points to "pulse" and has the same issues,
+        // and "sysdefault" has sampling rates from 4000 to 2^32-1 Hz and 32 possible channel counts.
+        let bad_alsa = device_name == "pulse"
+            || supported_config_ranges.len() > 8
+            || supported_config_ranges[0].max_sample_rate().0 >= 1_000_000;
+
+        let mut args = Vec::with_capacity(2);
+        if opt.sample_rate.is_none() {
+            args.push("--sample-rate 48000");
+        }
+        if opt.channels.is_none() {
+            args.push("--channels 2");
+        }
+        let args = args.join(" ");
+
+        let msg = formatdoc!(
+            "Try appending the following (or values of your choice) to the command line:
+                {}
+            If running from the Git repository, try:
+                cargo run -- [ARGS]",
+            args,
+        );
+        if bad_alsa {
+            bail!(
+                "The current ALSA device (eg. PulseAudio) requires specifying a sampling rate and channel count manually.\n{}",
+                msg
+            );
+        } else {
+            println!(
+                "Warning: On ALSA, this app may not use the correct sampling rate and channel count.\n{}\n",
+                msg
+            );
+        }
+    }
+
     let supported_config: cpal::SupportedStreamConfig = {
         // In cpal, each SupportedStreamConfigRange has a single channel count.
         // Pick either the first SupportedStreamConfigRange,
