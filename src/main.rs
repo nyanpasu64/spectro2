@@ -5,11 +5,12 @@ mod fft;
 mod renderer;
 mod sync;
 
-use anyhow::{Context, Error, Result};
+use anyhow::{bail, Context, Error, Result};
 use clap::AppSettings;
 use common::SpectrumFrameRef;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use fft::*;
+use indoc::formatdoc;
 use spin_sleep::LoopHelper;
 use std::cmp::min;
 use std::io::{self, Write};
@@ -68,6 +69,10 @@ fn parse_redraw_size(src: &str) -> Result<usize> {
     global_settings(&[AppSettings::DeriveDisplayOrder, AppSettings::UnifiedHelpMessage]),
 )]
 pub struct Opt {
+    /// If passed, prints a list of audio devices, and stream modes for the chosen device.
+    #[structopt(short = "D", long)]
+    show_devices: bool,
+
     /// If passed, will override which device is selected.
     ///
     /// This overrides --loopback for picking devices.
@@ -185,20 +190,22 @@ fn main() -> Result<()> {
         .context("error when querying devices")?
         .collect();
 
-    println!("Devices:");
-    for (i, dev) in devices.iter().enumerate() {
-        println!(
-            "{}. {}",
-            i,
-            match &dev.name() {
-                Ok(s) => s.as_ref(),
-                Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
-            }
-        );
-        println!("    Input: {:?}", dev.default_input_config());
-        println!("    Output: {:?}", dev.default_output_config());
+    if opt.show_devices {
+        println!("Devices:");
+        for (i, dev) in devices.iter().enumerate() {
+            println!(
+                "{}. {}",
+                i,
+                match &dev.name() {
+                    Ok(s) => s.as_ref(),
+                    Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
+                }
+            );
+            println!("    Input: {:?}", dev.default_input_config());
+            println!("    Output: {:?}", dev.default_output_config());
+        }
+        println!("");
     }
-    println!("");
 
     // TODO add checkbox for toggling between input and loopback capture
     let device = if let Some(device_index) = opt.device_index {
@@ -213,13 +220,13 @@ fn main() -> Result<()> {
         .context("no input device available")?
     };
 
-    println!(
-        "Input device: {}",
-        match &device.name() {
-            Ok(s) => s.as_ref(),
-            Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
-        }
-    );
+    let device_name = device.name();
+    let device_name = match &device_name {
+        Ok(ref s) => s.as_ref(),
+        Err(_) => "OOPSIE WOOPSIE!! Uwu We made a fucky wucky!!",
+    };
+
+    println!("Input device: {}", device_name);
 
     let supported_config_ranges: Vec<cpal::SupportedStreamConfigRange> = if opt.loopback {
         device
@@ -233,15 +240,65 @@ fn main() -> Result<()> {
             .collect()
     };
 
-    println!("Supported configs:");
-    for cfg in &supported_config_ranges {
-        println!("- {:?}", cfg)
-    }
-    println!("");
+    // ALSA expects options to be determined by the application, not the OS
+    // (which supplies a range of possibilities).
+    let is_alsa = host.id().name() == "ALSA";
 
-    // TODO pick native sampling rate.
-    // ALSA Pipewire has a max_sample_rate of 384000,
-    // even if device doesn't run at that rate.
+    // If we're on ALSA and the user hasn't set both channel count and sampling rate, warn the user.
+    let should_warn = is_alsa && !(opt.channels.is_some() && opt.sample_rate.is_some());
+
+    if opt.show_devices || should_warn {
+        println!("Supported configs:");
+        for cfg in &supported_config_ranges {
+            println!("- {:?}", cfg)
+        }
+        println!("");
+    };
+
+    if should_warn {
+        // When cpal uses the ALSA API to talk to Pulse (or some other devices),
+        // the OS-supplied options range is gibberish
+        // (ranging from 1 to 384000 Hz, 1 to 32 channels, and multiple sample formats).
+        // The application must pick options itself.
+        //
+        // The conditional is an arbitrarily chosen heuristic for detecting cases
+        // where cpal's default rate or channel count are unacceptable.
+        //
+        // On my system, the "default" device points to "pulse" and has the same issues,
+        // and "sysdefault" has sampling rates from 4000 to 2^32-1 Hz and 32 possible channel counts.
+        let bad_alsa = device_name == "pulse"
+            || supported_config_ranges.len() > 8
+            || supported_config_ranges[0].max_sample_rate().0 >= 1_000_000;
+
+        let mut args = Vec::with_capacity(2);
+        if opt.sample_rate.is_none() {
+            args.push("--sample-rate 48000");
+        }
+        if opt.channels.is_none() {
+            args.push("--channels 2");
+        }
+        let args = args.join(" ");
+
+        let msg = formatdoc!(
+            "Try appending the following (or values of your choice) to the command line:
+                {}
+            If running from the Git repository, try:
+                cargo run -- [ARGS]",
+            args,
+        );
+        if bad_alsa {
+            bail!(
+                "The current ALSA device (eg. PulseAudio) requires specifying a sampling rate and channel count manually.\n{}",
+                msg
+            );
+        } else {
+            println!(
+                "Warning: On ALSA, this app may not use the correct sampling rate and channel count.\n{}\n",
+                msg
+            );
+        }
+    }
+
     let supported_config: cpal::SupportedStreamConfig = {
         // In cpal, each SupportedStreamConfigRange has a single channel count.
         // Pick either the first SupportedStreamConfigRange,
@@ -254,7 +311,10 @@ fn main() -> Result<()> {
             if let Some(channels) = opt.channels {
                 let first_valid_range = supported_config_ranges
                     .iter()
-                    .filter(|range| range.channels() as u32 == channels)
+                    .filter(|range| {
+                        range.channels() as u32 == channels
+                            && range.sample_format() == cpal::SampleFormat::I16
+                    })
                     .next();
                 match first_valid_range {
                     Some(range) => range,
@@ -337,10 +397,15 @@ fn main() -> Result<()> {
         };
 
         let print_to_terminal = opt.terminal_print;
+
+        // We only accept devices that output the i16 sample format.
+        // I haven't found a device that doesn't support i16 so far,
+        // but if necessary I could add a CLI argument to pick the sample format,
+        // and make this lambda or FftBuffer perform sample range conversion.
         device
             .build_input_stream(
                 &config,
-                move |data, _| {
+                move |data: &[i16], _| {
                     if print_to_terminal {
                         let peak = data
                             .iter()
