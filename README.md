@@ -8,6 +8,8 @@ spectro2 is written in Rust, performs frequency-domain analysis (FFT) on the CPU
 
 Clone the repo and run `cargo run`. `cargo run --release` will not generate debug info, and may or may not produce a slightly faster binary.
 
+Building the software also requires CMake, Git, Python 3, a C++ compiler, and (on Windows) Ninja, in order to build the Vulkan SDK.
+
 Note that this project has custom flags for debug and release builds. Dependencies like the FFT algorithm are compiled in `-O2` in both debug and release mode; only this crate has optimization disabled in debug mode. See `.cargo/config.toml` for details.
 
 ### Testing `flip-cell`
