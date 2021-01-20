@@ -1133,6 +1133,8 @@ dependencies = [
  "cfg-if 1.0.0",
  "generator",
  "scoped-tls",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

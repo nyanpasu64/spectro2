@@ -179,7 +179,10 @@ impl<T> FlipWriter<T> {
         // `data[write_index]` are ordered before the write.
         // I'm not sure if using Relaxed for the read is sound.
         // So use Acquire just to be safe.
-        let depublished = self.cell.shared_state.swap(publish_index, Ordering::AcqRel);
+        let depublished = self
+            .cell
+            .shared_state
+            .swap(publish_index, Ordering::Release);
 
         self.write_index = depublished & INDEX_MASK;
     }
@@ -238,7 +241,7 @@ impl<T> FlipReader<T> {
         // So use Release just to be safe.
         // The read has Acquire ordering, so all our future accesses to
         // `data[published_state & INDEX_MASK]` are ordered after the read.
-        let published_state = self.cell.shared_state.swap(stale_state, Ordering::AcqRel);
+        let published_state = self.cell.shared_state.swap(stale_state, Ordering::Acquire);
         assert!(published_state & FRESH_FLAG == FRESH_FLAG);
 
         self.read_index = published_state & INDEX_MASK;
@@ -270,14 +273,21 @@ mod tests {
 
             let write_thread = thread::spawn(move || {
                 for x in write_begin..write_end {
+                    eprintln!("writer iteration #{}", x);
+                    eprintln!("mutate [{}]", writer.write_index);
                     writer.with_mut(|p| *p = x);
+                    eprintln!("publish [{}]", writer.write_index);
                     writer.publish();
                 }
             });
 
             let mut last_seen = -1i32;
-            for _ in 0..8 {
+            for x in 0..2 {
+                eprintln!("reader iteration #{}", x);
+                eprintln!("fetch discard [{}]", reader.read_index);
                 let is_fresh = reader.fetch();
+
+                eprintln!("read [{}]", reader.read_index);
                 let x = reader.with(|&x| x);
 
                 assert!((initial..write_end).contains(&x));
