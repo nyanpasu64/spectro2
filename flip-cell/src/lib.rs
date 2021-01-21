@@ -42,7 +42,8 @@ use dep::*;
 /// and a bit-flag for whether the array entry was last owned by the writer or reader.
 ///
 /// Internally, the writer or reader can atomically swap their "owning index" with the shared index,
-/// using various memory orderings.
+/// using the AcqRel memory ordering.
+/// (Weaker orderings are not sound; see https://github.com/HadrienG2/triple-buffer/issues/14.)
 /// This transfers ownership of the T instances without moving them in memory.
 ///
 /// # Public API
@@ -177,8 +178,10 @@ impl<T> FlipWriter<T> {
 
         // The write has Release ordering, so all our past writes to
         // `data[write_index]` are ordered before the write.
-        // I'm not sure if using Relaxed for the read is sound.
-        // So use Acquire just to be safe.
+        // The read has Acquire ordering, so all our future writes to
+        // `data[depublished]` are ordered after the read.
+        //
+        // (Using Relaxed for the read is not sound; see https://github.com/HadrienG2/triple-buffer/issues/14.)
         let depublished = self.cell.shared_state.swap(publish_index, Ordering::AcqRel);
 
         self.write_index = depublished & INDEX_MASK;
@@ -234,10 +237,12 @@ impl<T> FlipReader<T> {
         // So unconditionally swap.
         let stale_state = self.read_index;
 
-        // I'm not sure if using Relaxed for the write is sound.
-        // So use Release just to be safe.
-        // The read has Acquire ordering, so all our future accesses to
+        // The write has Release ordering, so all our past reads to
+        // `data[read_index]` are ordered before the write.
+        // The read has Acquire ordering, so all our future reads to
         // `data[published_state & INDEX_MASK]` are ordered after the read.
+        //
+        // (Using Relaxed for the write is not sound; see https://github.com/HadrienG2/triple-buffer/issues/14.)
         let published_state = self.cell.shared_state.swap(stale_state, Ordering::AcqRel);
         assert!(published_state & FRESH_FLAG == FRESH_FLAG);
 
