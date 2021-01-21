@@ -75,8 +75,11 @@ pub struct State {
 
 fn load_from_file(fname: &str) -> Result<String> {
     let mut buf: Vec<u8> = vec![];
-    File::open(PathBuf::from(fname))?.read_to_end(&mut buf)?;
-    Ok(String::from_utf8(buf)?)
+    File::open(PathBuf::from(fname))
+        .with_context(|| format!("Opening file {}", fname))?
+        .read_to_end(&mut buf)
+        .context("Reading file")?;
+    Ok(String::from_utf8(buf).context("Validating UTF-8")?)
 }
 
 impl State {
@@ -122,8 +125,8 @@ impl State {
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let vs_src = load_from_file("shaders/shader.vert")?;
-        let fs_src = load_from_file("shaders/shader.frag")?;
+        let vs_src = load_from_file("shaders/shader.vert").context("Loading vertex shader")?;
+        let fs_src = load_from_file("shaders/shader.frag").context("Loading fragment shader")?;
         let mut compiler =
             shaderc::Compiler::new().context("Failed to initialize shader compiler")?;
         let vs_spirv = compiler.compile_into_spirv(
