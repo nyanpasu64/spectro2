@@ -25,7 +25,7 @@ use winit::{
 const MIN_FFT_SIZE: usize = 4;
 const MAX_FFT_SIZE: usize = 16384;
 
-const APP_NAME: &'static str = env!("CARGO_PKG_NAME");
+const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 use structopt::StructOpt;
 
@@ -181,7 +181,7 @@ fn main() -> Result<()> {
     let mut opt = Opt::from_args();
     opt.parse_validate()?;
 
-    println!("");
+    println!();
 
     let host = cpal::default_host();
 
@@ -204,7 +204,7 @@ fn main() -> Result<()> {
             println!("    Input: {:?}", dev.default_input_config());
             println!("    Output: {:?}", dev.default_output_config());
         }
-        println!("");
+        println!();
     }
 
     // TODO add checkbox for toggling between input and loopback capture
@@ -252,7 +252,7 @@ fn main() -> Result<()> {
         for cfg in &supported_config_ranges {
             println!("- {:?}", cfg)
         }
-        println!("");
+        println!();
     };
 
     if should_warn {
@@ -309,13 +309,10 @@ fn main() -> Result<()> {
                 .context("no supported config?!")?;
 
             if let Some(channels) = opt.channels {
-                let first_valid_range = supported_config_ranges
-                    .iter()
-                    .filter(|range| {
-                        range.channels() as u32 == channels
-                            && range.sample_format() == cpal::SampleFormat::I16
-                    })
-                    .next();
+                let first_valid_range = supported_config_ranges.iter().find(|range| {
+                    range.channels() as u32 == channels
+                        && range.sample_format() == cpal::SampleFormat::I16
+                });
                 match first_valid_range {
                     Some(range) => range,
                     None => {
