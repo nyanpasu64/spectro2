@@ -1,31 +1,43 @@
-# Faster linking?
-[target.x86_64-pc-windows-msvc]
-linker = "lld-link.exe"
+# Documentation at https://doc.rust-lang.org/cargo/reference/config.html.
 
-# https://doc.rust-lang.org/cargo/reference/profiles.html
-# profile.dev = no --release
-# fast to compile, okay enough to run
+# Uncommenting this makes builds faster,
+# but lld-link is not available on GitHub Actions or user machines.
+# If you want to use lld-link, add that key to ~/.cargo/config[.toml].
+# [target.x86_64-pc-windows-msvc]
+# linker = "lld-link.exe"
+
 [profile.dev]
+# Documentation at https://doc.rust-lang.org/cargo/reference/profiles.html
+# [profile.dev] controls `cargo build` (without --release).
+#
+# This configuration makes incremental builds fast, and the application runtime fast enough.
+# This is accomplished by turning on optimizations for dependencies but not the spectro2 crate.
 opt-level = 2
 debug = true
 debug-assertions = true
 overflow-checks = true
-
 # https://doc.rust-lang.org/cargo/reference/profiles.html#lto
 #
-# >false: Performs "thin local LTO" which performs "thin" LTO on the local crate
-# >only across its codegen units.
-# >No LTO is performed if codegen units is 1 or opt-level is 0.
-#
-# >"off": Disables LTO.
+# > false: Performs "thin local LTO" which performs "thin" LTO on the local crate only across its codegen units.
+# > No LTO is performed if codegen units is 1 or opt-level is 0.
+# >
+# > "off": Disables LTO.
 #
 # who came up with this
 lto = "off"
-
+# I have no use for catching panics.
 panic = 'abort'
 incremental = false
 codegen-units = 16
 rpath = false
+
+[profile.dev.package.spectro2]
+# At opt-level=1 with lto=false, editing main() takes 40 seconds to rebuild.
+# At opt-level=1 with lto="off", editing main() takes 30 seconds to rebuild.
+# At opt-level=0, editing main() takes 12 seconds to rebuild.
+opt-level = 0
+# Only enable incremental builds for this crate
+incremental = true
 
 [profile.release]
 opt-level = 2
@@ -37,16 +49,6 @@ panic = 'abort'
 incremental = false
 codegen-units = 16
 rpath = false
-
-# Build all dependencies optimized, but reduce optimization for this crate
-# Only enable incremental builds for this crate
-[profile.dev.package.spectro2]
-
-# At opt-level=1 with lto=false, editing main() takes 40 seconds to rebuild.
-# At opt-level=1 with lto="off", editing main() takes 30 seconds to rebuild.
-# At opt-level=0, editing main() takes 12 seconds to rebuild.
-opt-level = 0
-incremental = true
 
 # Only enable incremental builds for this crate
 [profile.release.package.spectro2]

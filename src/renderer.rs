@@ -1,8 +1,11 @@
 use crate::common::{FftSample, FftSlice, SpectrumFrame};
 use crate::Opt;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use itertools::izip;
 use num_traits::Zero;
+use std::env::current_exe;
+use std::ffi::OsStr;
+use std::path::Path;
 use std::{fs::File, io::Read, path::PathBuf, slice};
 use wgpu::util::DeviceExt;
 use winit::{event::*, window::Window};
@@ -73,10 +76,69 @@ pub struct State {
     bind_group: wgpu::BindGroup,
 }
 
-fn load_from_file(fname: &str) -> Result<String> {
+fn load_from_file(fname: &Path) -> Result<String> {
     let mut buf: Vec<u8> = vec![];
-    File::open(PathBuf::from(fname))?.read_to_end(&mut buf)?;
-    Ok(String::from_utf8(buf)?)
+    File::open(fname)
+        .with_context(|| format!("Opening file {}", fname.display()))?
+        .read_to_end(&mut buf)
+        .context("Reading file")?;
+    Ok(String::from_utf8(buf).context("Validating UTF-8")?)
+}
+
+fn get_shader_dir() -> Result<PathBuf> {
+    let exe_path = current_exe().context("obtaining executable path")?;
+    let exe_dir = exe_path
+        .parent()
+        .context("obtaining executable directory")?;
+
+    fn calc_shader_dir(parent_dir: &Path) -> PathBuf {
+        parent_dir.join("shaders")
+    }
+
+    /// Check if ${parent_dir}/shaders exists.
+    fn check_shader_dir(parent_dir: &Path) -> Result<Option<PathBuf>> {
+        let shaders = calc_shader_dir(parent_dir);
+        if shaders.is_dir() {
+            Ok(Some(shaders))
+        } else {
+            Ok(None)
+        }
+    }
+
+    // Check for ${exe_dir}/shaders directory.
+    if let Some(shaders) = check_shader_dir(exe_dir)? {
+        return Ok(shaders);
+    }
+
+    /// Check if we're under /target/{debug|release}, and /shaders exists.
+    fn get_package_root(exe_dir: &Path) -> Option<&Path> {
+        let target_dir = exe_dir.parent()?;
+        if target_dir.file_name() != Some(OsStr::new("target")) {
+            return None;
+        }
+        let cargo_dir = target_dir.parent()?;
+        Some(cargo_dir)
+    }
+
+    let package_root = match get_package_root(exe_dir) {
+        Some(package_root) => package_root,
+        None => bail!(
+            "Missing shader directory (checked {})",
+            calc_shader_dir(exe_dir).display()
+        ),
+    };
+
+    if let Some(shaders) = check_shader_dir(package_root)
+        .context("Binary located in .../target/foo/spectro2, checking .../shaders")?
+    {
+        return Ok(shaders);
+    }
+
+    bail!(
+        "Missing shader directory (checked {} and {})",
+        calc_shader_dir(exe_dir).display(),
+        calc_shader_dir(package_root).display()
+    );
 }
 
 impl State {
@@ -122,8 +184,11 @@ impl State {
 
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
-        let vs_src = load_from_file("shaders/shader.vert")?;
-        let fs_src = load_from_file("shaders/shader.frag")?;
+        let shader_dir = get_shader_dir()?;
+        let vs_src =
+            load_from_file(&shader_dir.join("shader.vert")).context("Loading vertex shader")?;
+        let fs_src =
+            load_from_file(&shader_dir.join("shader.frag")).context("Loading fragment shader")?;
         let mut compiler =
             shaderc::Compiler::new().context("Failed to initialize shader compiler")?;
         let vs_spirv = compiler.compile_into_spirv(
