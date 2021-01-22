@@ -4,6 +4,10 @@ spectro2 is an in-development audio spectrum visualizer which shows precise pitc
 
 spectro2 is written in Rust, performs frequency-domain analysis (FFT) on the CPU, and renders an image on the GPU using wgpu.
 
+## Download
+
+Pre-built Windows and Linux (untested) development binaries are available from [GitHub Actions](https://github.com/nyanpasu64/spectro2/actions), which requires logging into GitHub. If you are not logged in, you can download binaries through [nightly.link](https://nightly.link/nyanpasu64/spectro2/workflows/rust/master) (which creates temporary direct links to GitHub Actions binaries).
+
 ## Building
 
 Clone the repo and run `cargo run`. `cargo run --release` will not generate debug info, and may or may not produce a slightly faster binary.

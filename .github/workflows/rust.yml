@@ -1,0 +1,65 @@
+# copied from https://github.com/actions-rs/cargo#example-workflow
+# and https://github.com/actions/starter-workflows/blob/main/ci/rust.yml
+on:
+  push:
+    branches: [$default-branch]
+  pull_request:
+    # to any branch
+
+name: CI
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    name: Build spectro2
+
+    # copied from https://github.com/cloudflare/wrangler/blob/fb677cbde0f8/.github/workflows/release.yml
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # matrix.build
+        build: [linux, windows] # macos
+        include:
+          - # if matrix.build == linux, set matrix.os = ubuntu-latest and matrix.rust = stable.
+            build: linux
+            os: ubuntu-latest
+            rust: stable
+          # - build: macos
+          #   os: macos-latest
+          #   rust: stable
+          - build: windows
+            os: windows-latest
+            rust: stable
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+      - name: Install Ninja (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: seanmiddleditch/gha-setup-ninja@master
+      - name: Install packages (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get install libasound2-dev
+      - name: cargo build --release
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      # this is just sad... omitting `py -3` is a silent no-op on GitHub Actions,
+      # `python` launches Python 2 on Ubuntu 18.04, and `python3` is not present on Windows.
+      # So I use different commands on Windows and Linux.
+      - name: Package artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        run: py -3 ci/build_github_actions.py archive
+      - name: Package artifact (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: python3 ci/build_github_actions.py archive
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: spectro2-${{ matrix.build }}-v${{ github.run_number }}-dev
+          path: archive-root/
