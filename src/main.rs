@@ -431,8 +431,8 @@ fn main() -> Result<()> {
     let window = {
         let window_builder = WindowBuilder::new()
             .with_inner_size(PhysicalSize {
-                width: 1024,
-                height: 768,
+                width: 1280,
+                height: 720,
             })
             .with_title(APP_NAME);
         #[cfg(target_os = "windows")]
