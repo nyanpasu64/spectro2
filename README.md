@@ -4,11 +4,11 @@ spectro2 is an in-development audio spectrum visualizer which shows precise pitc
 
 spectro2 is written in Rust, performs frequency-domain analysis (FFT) on the CPU, and renders an image on the GPU using wgpu.
 
-A help file is available at [help/index.md](help/index.md).
+A help file is available at [docs/help.md](docs/help.md).
 
 Screenshot from [Pokémon Mystery Dungeon 2 - Dialga's Fight To the Finish! (MIDI rip)](https://www.youtube.com/watch?v=ytLzeQNiJDs):
 
-![Screenshot of spectro2](help/images/spectro2.png)
+![Screenshot of spectro2](docs/images/spectro2.png)
 
 ## Download
 
@@ -30,7 +30,7 @@ If you download binaries, you can instead run `spectro2` directly.
 
 **SEIZURE WARNING:** Rapidly changing audio can cause flashing lights, especially once colored stereo is added.
 
-For more information, see the help file at [help/index.md](help/index.md).
+For more information, see the help file at [docs/help.md](docs/help.md).
 
 ### Testing `flip-cell`
 

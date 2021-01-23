@@ -65,7 +65,10 @@ def archive():
             raise Exception(f"unknown OS {sys.platform}, cannot determine binary name")
 
         copytree_to_cwd(root_dir, "shaders")
-        copytree_to_cwd(root_dir, "help")
+
+        docs_dir = root_dir / "docs"
+        copy_to_cwd(docs_dir, "help.md")
+        copytree_to_cwd(docs_dir, "images")
 
 
 class DefaultHelpParser(argparse.ArgumentParser):
